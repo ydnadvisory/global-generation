@@ -12,9 +12,15 @@ import {
   Settings,
   Target,
 } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { exercise, type TextRange } from "./data";
-import { addRange, getSelectionRange, scoreCoverage } from "./utils";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  getExercise,
+  submitAnswer,
+  type EvidenceExercise,
+  type SubmissionResult,
+  type TextRange,
+} from "./api";
+import { addRange, getSelectionRange } from "./utils";
 
 const navItems = [
   { label: "Главная", icon: Home },
@@ -24,52 +30,87 @@ const navItems = [
 ];
 
 type AnswersByQuestion = Record<string, TextRange[]>;
-type SubmittedByQuestion = Record<string, boolean>;
+type SubmissionsByQuestion = Record<string, SubmissionResult>;
 
 function App() {
-  const [activeQuestionId, setActiveQuestionId] = useState(
-    exercise.questions[0].id,
-  );
+  const [exercise, setExercise] = useState<EvidenceExercise | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersByQuestion>({});
-  const [submitted, setSubmitted] = useState<SubmittedByQuestion>({});
+  const [submissions, setSubmissions] = useState<SubmissionsByQuestion>({});
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submittingQuestionId, setSubmittingQuestionId] = useState<string | null>(
+    null,
+  );
   const textRef = useRef<HTMLDivElement>(null);
 
-  const activeQuestion = exercise.questions.find(
+  useEffect(() => {
+    let mounted = true;
+
+    getExercise()
+      .then((loadedExercise) => {
+        if (!mounted) return;
+
+        setExercise(loadedExercise);
+        setActiveQuestionId(loadedExercise.questions[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (mounted) setLoadError("Не удалось загрузить упражнение.");
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (loadError) {
+    return <main className="app-status">{loadError}</main>;
+  }
+
+  if (!exercise || !activeQuestionId) {
+    return <main className="app-status">Загрузка упражнения…</main>;
+  }
+
+  const loadedExercise: EvidenceExercise = exercise;
+
+  const selectedQuestion = loadedExercise.questions.find(
     ({ id }) => id === activeQuestionId,
-  )!;
-  const activeRanges = answers[activeQuestion.id] ?? [];
-  const activeScore = useMemo(
-    () => scoreCoverage(activeRanges, activeQuestion.correctRanges),
-    [activeRanges, activeQuestion.correctRanges],
   );
-  const activeAnswerPassed = activeScore.percent >= 70;
-  const completedCount = Object.keys(submitted).length;
+  if (!selectedQuestion) {
+    return <main className="app-status">Вопрос не найден.</main>;
+  }
+
+  const currentQuestion = selectedQuestion;
+
+  const activeRanges = answers[currentQuestion.id] ?? [];
+  const activeSubmission = submissions[currentQuestion.id];
+  const completedCount = Object.keys(submissions).length;
 
   function captureSelection() {
-    if (submitted[activeQuestion.id] || !textRef.current) return;
+    if (activeSubmission || !textRef.current) return;
 
     const range = getSelectionRange(textRef.current);
     if (!range) return;
 
     setAnswers((current) => ({
       ...current,
-      [activeQuestion.id]: addRange(current[activeQuestion.id] ?? [], range),
+      [currentQuestion.id]: addRange(current[currentQuestion.id] ?? [], range),
     }));
     window.getSelection()?.removeAllRanges();
   }
 
   function clearSelection() {
-    if (submitted[activeQuestion.id]) return;
+    if (activeSubmission) return;
 
-    setAnswers((current) => ({ ...current, [activeQuestion.id]: [] }));
+    setAnswers((current) => ({ ...current, [currentQuestion.id]: [] }));
   }
 
   function removeSelectedRange(rangeToRemove: TextRange) {
-    if (submitted[activeQuestion.id]) return;
+    if (activeSubmission) return;
 
     setAnswers((current) => ({
       ...current,
-      [activeQuestion.id]: (current[activeQuestion.id] ?? []).filter(
+      [currentQuestion.id]: (current[currentQuestion.id] ?? []).filter(
         ([start, end]) =>
           start !== rangeToRemove[0] || end !== rangeToRemove[1],
       ),
@@ -77,14 +118,40 @@ function App() {
   }
 
   function resetExercise() {
-    setActiveQuestionId(exercise.questions[0].id);
+    setActiveQuestionId(loadedExercise.questions[0].id);
     setAnswers({});
-    setSubmitted({});
+    setSubmissions({});
+    setSubmissionError(null);
+  }
+
+  async function submitActiveAnswer() {
+    if (activeRanges.length === 0 || activeSubmission) return;
+
+    setSubmissionError(null);
+    setSubmittingQuestionId(currentQuestion.id);
+
+    try {
+      const result = await submitAnswer(
+        loadedExercise.id,
+        currentQuestion.id,
+        activeRanges,
+      );
+      setSubmissions((current) => ({
+        ...current,
+        [currentQuestion.id]: result,
+      }));
+    } catch {
+      setSubmissionError("Не удалось отправить ответ. Попробуйте ещё раз.");
+    } finally {
+      setSubmittingQuestionId(null);
+    }
   }
 
   return (
     <PortalShell
-      progress={Math.round((completedCount / exercise.questions.length) * 100)}
+      progress={Math.round(
+        (completedCount / loadedExercise.questions.length) * 100,
+      )}
       onReset={resetExercise}
     >
       <main className="feature-page">
@@ -94,11 +161,11 @@ function App() {
           </button>
           <div className="head-copy">
             <p className="eyebrow">READING &amp; WRITING</p>
-            <h1>{exercise.title}</h1>
-            <p>{exercise.instruction}</p>
+            <h1>{loadedExercise.title}</h1>
+            <p>{loadedExercise.instruction}</p>
           </div>
           <div className="session-meta">
-            <Clock3 size={17} /> {completedCount} из {exercise.questions.length}{" "}
+            <Clock3 size={17} /> {completedCount} из {loadedExercise.questions.length}{" "}
             вопросов
           </div>
         </section>
@@ -109,7 +176,7 @@ function App() {
               <span className="section-chip">
                 <BookOpen size={13} /> Чтение и письмо
               </span>
-              <span className="difficulty-chip">{exercise.difficulty}</span>
+              <span className="difficulty-chip">{loadedExercise.difficulty}</span>
             </div>
 
             <div className="passage-area">
@@ -122,10 +189,10 @@ function App() {
                 onTouchEnd={captureSelection}
               >
                 <HighlightedText
-                  text={exercise.text}
+                  text={loadedExercise.text}
                   selectedRanges={activeRanges}
-                  correctRanges={activeQuestion.correctRanges}
-                  showCorrectRanges={submitted[activeQuestion.id] ?? false}
+                  correctRanges={activeSubmission?.correctRanges ?? []}
+                  showCorrectRanges={Boolean(activeSubmission)}
                   onRemoveRange={removeSelectedRange}
                 />
               </div>
@@ -139,32 +206,32 @@ function App() {
             <div className="question-copy">
               <p className="micro-label">
                 ВОПРОС{" "}
-                {exercise.questions.findIndex(
-                  ({ id }) => id === activeQuestion.id,
+                {loadedExercise.questions.findIndex(
+                  ({ id }) => id === currentQuestion.id,
                 ) + 1}
               </p>
-              <h2>{activeQuestion.prompt}</h2>
+              <h2>{currentQuestion.prompt}</h2>
             </div>
 
             <div className="question-tabs" aria-label="Вопросы">
-              {exercise.questions.map((question, index) => (
+              {loadedExercise.questions.map((question, index) => (
                 <button
                   key={question.id}
                   className={
-                    question.id === activeQuestion.id
+                    question.id === currentQuestion.id
                       ? "question-tab active"
                       : "question-tab"
                   }
                   onClick={() => setActiveQuestionId(question.id)}
                   aria-label={`Вопрос ${index + 1}`}
-                  aria-pressed={question.id === activeQuestion.id}
+                  aria-pressed={question.id === currentQuestion.id}
                 >
-                  {submitted[question.id] ? <Check size={14} /> : index + 1}
+                  {submissions[question.id] ? <Check size={14} /> : index + 1}
                 </button>
               ))}
             </div>
 
-            {!submitted[activeQuestion.id] && (
+            {!activeSubmission && (
               <p className="selection-status" aria-live="polite">
                 {activeRanges.length === 0
                   ? "Выделение пока не выбрано"
@@ -172,28 +239,29 @@ function App() {
               </p>
             )}
 
-            {submitted[activeQuestion.id] ? (
+            {activeSubmission ? (
               <div
                 className={
-                  activeAnswerPassed
+                  activeSubmission.passed
                     ? "score-card score-card-success"
                     : "score-card score-card-review"
                 }
                 aria-live="polite"
               >
-                <strong>{activeScore.percent}%</strong>
+                <strong>{activeSubmission.score.percent}%</strong>
                 <span>
-                  {activeAnswerPassed
+                  {activeSubmission.passed
                     ? "Ответ засчитан"
                     : "Нужно повторить"}
                 </span>
                 <p>
-                  Верно: {activeScore.coveredCharacters} из{" "}
-                  {activeScore.correctCharacters} символов.
+                  Верно: {activeSubmission.score.coveredCharacters} из{" "}
+                  {activeSubmission.score.correctCharacters} символов.
                 </p>
-                {activeScore.incorrectCharacters > 0 && (
+                {activeSubmission.score.incorrectCharacters > 0 && (
                   <p className="score-penalty">
-                    Штраф: −{activeScore.penaltyCharacters} за {activeScore.incorrectCharacters} лишних символов.
+                    Штраф: −{activeSubmission.score.penaltyCharacters} за{" "}
+                    {activeSubmission.score.incorrectCharacters} лишних символов.
                   </p>
                 )}
                 <p className="answer-key-hint">
@@ -209,7 +277,7 @@ function App() {
               </div>
             )}
 
-            {!submitted[activeQuestion.id] && activeRanges.length > 0 && (
+            {!activeSubmission && activeRanges.length > 0 && (
               <button
                 className="text-button clear-button"
                 onClick={clearSelection}
@@ -217,21 +285,25 @@ function App() {
                 <RotateCcw size={14} /> Очистить выделение
               </button>
             )}
+            {submissionError && (
+              <p className="submission-error" role="alert">
+                {submissionError}
+              </p>
+            )}
             <button
               className="primary-button full-width"
               disabled={
-                submitted[activeQuestion.id] || activeRanges.length === 0
+                Boolean(activeSubmission) ||
+                activeRanges.length === 0 ||
+                submittingQuestionId === currentQuestion.id
               }
-              onClick={() =>
-                setSubmitted((current) => ({
-                  ...current,
-                  [activeQuestion.id]: true,
-                }))
-              }
+              onClick={submitActiveAnswer}
             >
-              {submitted[activeQuestion.id]
+              {activeSubmission
                 ? "Ответ отправлен"
-                : "Отправить ответ"}
+                : submittingQuestionId === currentQuestion.id
+                  ? "Отправка…"
+                  : "Отправить ответ"}
             </button>
           </aside>
         </div>

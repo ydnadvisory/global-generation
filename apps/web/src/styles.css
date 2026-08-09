@@ -32,6 +32,21 @@
   font-synthesis: none;
 }
 
+.app-status {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.submission-error {
+  margin: 0 0 0.75rem;
+  color: #b42318;
+  font-size: 0.875rem;
+}
+
 * {
   box-sizing: border-box;
 }

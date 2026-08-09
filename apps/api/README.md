@@ -1,16 +1,16 @@
-# Small API
+# API
 
-FastAPI app lives in `apps/api/app/main.py`.
-
-Run locally:
+FastAPI grading service. Dependencies are managed by `uv` and pinned in `uv.lock`.
 
 ```bash
-cd apps/api
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
+uv sync
+uv run uvicorn app.main:app --reload
+uv run pytest
+uv run ruff check .
 ```
 
-Health endpoints:
-- `GET /` -> `{ "status": "ok" }`
-- `GET /health` -> `{ "status": "ok" }`
+Endpoints:
+
+- `GET /health` — service health.
+- `GET /api/exercises/rw-evidence-1` — public exercise data; no answer key.
+- `POST /api/exercises/rw-evidence-1/submissions` — server-side grading.

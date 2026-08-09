@@ -3,7 +3,6 @@ import {
   addRange,
   getSelectionRange,
   normaliseRanges,
-  scoreCoverage,
 } from "./utils";
 
 describe("normaliseRanges", () => {
@@ -24,30 +23,6 @@ describe("normaliseRanges", () => {
 describe("addRange", () => {
   it("normalizes when adding a new range", () => {
     expect(addRange([[1, 5]], [3, 9])).toEqual([[1, 9]]);
-  });
-});
-
-describe("scoreCoverage", () => {
-  it("computes complete coverage without penalty", () => {
-    expect(scoreCoverage([[0, 3], [5, 8]], [[0, 3], [5, 8]])).toEqual({
-      coveredCharacters: 6,
-      correctCharacters: 6,
-      incorrectCharacters: 0,
-      penaltyCharacters: 0,
-      selectedCharacters: 6,
-      percent: 100,
-    });
-  });
-
-  it("applies partial credit and penalties", () => {
-    expect(scoreCoverage([[0, 5]], [[2, 6]])).toEqual({
-      coveredCharacters: 3,
-      correctCharacters: 4,
-      incorrectCharacters: 2,
-      penaltyCharacters: 0.5,
-      selectedCharacters: 5,
-      percent: 63,
-    });
   });
 });
 

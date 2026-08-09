@@ -3,32 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.14.x",
+    "npm": "10.x || 11.x"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
   "scripts": {
     "dev": "npm run web:dev",
-    "web:dev": "cd apps/web && vite",
-    "web:build": "cd apps/web && tsc -b && vite build",
-    "web:preview": "cd apps/web && vite preview",
-    "web:test": "cd apps/web && vitest run",
-    "web:test:coverage": "cd apps/web && vitest run --coverage",
-    "api:dev": "python -m uvicorn app.main:app --reload --app-dir apps/api",
-    "api:start": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir apps/api"
-  },
-  "dependencies": {
-    "@fontsource/inter": "^5.3.0",
-    "@vitejs/plugin-react": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "typescript": "latest",
-    "vite": "latest"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitest/coverage-v8": "^4.1.10",
-    "jsdom": "latest",
-    "vitest": "latest"
+    "web:dev": "npm run dev --workspace @find-the-evidence/web",
+    "web:build": "npm run build --workspace @find-the-evidence/web",
+    "web:preview": "npm run preview --workspace @find-the-evidence/web",
+    "web:test": "npm run test --workspace @find-the-evidence/web",
+    "web:test:coverage": "npm run test:coverage --workspace @find-the-evidence/web",
+    "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload",
+    "api:start": "cd apps/api && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "api:test": "cd apps/api && uv run pytest"
   }
 }

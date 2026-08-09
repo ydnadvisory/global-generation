@@ -1,15 +1,4 @@
-import type { TextRange } from "./data";
-
-const INCORRECT_CHARACTER_PENALTY = 0.25;
-
-export type CoverageScore = {
-  coveredCharacters: number;
-  correctCharacters: number;
-  incorrectCharacters: number;
-  penaltyCharacters: number;
-  selectedCharacters: number;
-  percent: number;
-};
+import type { TextRange } from "./api";
 
 export function normaliseRanges(ranges: readonly TextRange[]): TextRange[] {
   const sorted = [...ranges]
@@ -36,57 +25,6 @@ export function addRange(
   range: TextRange,
 ): TextRange[] {
   return normaliseRanges([...ranges, range]);
-}
-
-export function scoreCoverage(
-  selectedRanges: readonly TextRange[],
-  correctRanges: readonly TextRange[],
-): CoverageScore {
-  const selected = normaliseRanges(selectedRanges);
-  const correct = normaliseRanges(correctRanges);
-  const correctCharacters = correct.reduce(
-    (total, [start, end]) => total + end - start,
-    0,
-  );
-  const selectedCharacters = selected.reduce(
-    (total, [start, end]) => total + end - start,
-    0,
-  );
-  const coveredCharacters = correct.reduce(
-    (total, [correctStart, correctEnd]) =>
-      total +
-      selected.reduce(
-        (coverage, [selectedStart, selectedEnd]) =>
-          coverage +
-          Math.max(
-            0,
-            Math.min(correctEnd, selectedEnd) -
-              Math.max(correctStart, selectedStart),
-          ),
-        0,
-      ),
-    0,
-  );
-  const incorrectCharacters = selectedCharacters - coveredCharacters;
-  const penaltyCharacters = incorrectCharacters * INCORRECT_CHARACTER_PENALTY;
-
-  return {
-    coveredCharacters,
-    correctCharacters,
-    incorrectCharacters,
-    penaltyCharacters,
-    selectedCharacters,
-    percent:
-      correctCharacters === 0
-        ? 0
-        : Math.max(
-            0,
-            Math.round(
-              ((coveredCharacters - penaltyCharacters) / correctCharacters) *
-                100,
-            ),
-          ),
-  };
 }
 
 export function getSelectionRange(container: HTMLElement): TextRange | null {

@@ -1,28 +1,43 @@
-# Find the Evidence (Monorepo)
+# Find the Evidence
 
-This repo is structured as a lightweight monorepo for a React frontend and a small Python API.
+Docker-first React and FastAPI application. The browser receives public exercise content from the API, submits selected ranges to `/api`, and receives server-side grading feedback. Correct answer ranges are not included in the initial browser payload.
 
-## Structure
+## Runtime structure
 
-- `apps/web` — Vite + React frontend (existing UI)
-- `apps/api` — FastAPI backend scaffold
+- `apps/web` — npm workspace with the Vite/React source and multi-stage Nginx image.
+- `apps/api` — `uv`-managed FastAPI service, locked in `uv.lock`.
+- `infra/nginx/nginx.conf` — SPA fallback, `/api` reverse proxy, and web health endpoint.
+- `compose.yaml` — public web service and private API service with health checks and read-only filesystems.
 
-## Frontend scripts
-
-From repo root:
-
-```bash
-npm run web:dev         # start Vite app
-npm run web:build       # type-check + production build
-npm run web:test        # run vitest suite
-npm run web:preview     # preview production build
-```
-
-## API scripts
+## Run with Docker
 
 ```bash
-npm run api:dev        # uvicorn with auto-reload
-npm run api:start      # uvicorn for stable process
+cp .env.example .env
+docker compose up --build
 ```
 
-Install API deps from `apps/api/requirements.txt` and start from that folder if preferred.
+Open `http://localhost:8080`. Only the web container publishes a host port. The API is reachable only through the web reverse proxy at `/api`.
+
+```bash
+docker compose down
+docker compose logs -f web api
+```
+
+## Local development
+
+Use Node `22.14.x` (`.nvmrc`) and npm workspaces:
+
+```bash
+npm ci
+npm run web:dev
+npm run web:test
+npm run web:build
+```
+
+Use `uv`; do not activate a virtual environment manually:
+
+```bash
+npm run api:dev
+npm run api:test
+cd apps/api && uv run ruff check .
+```
