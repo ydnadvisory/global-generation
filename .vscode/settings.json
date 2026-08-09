@@ -6,6 +6,7 @@
   "python.testing.pytestArgs": [
     "tests"
   ],
+  "python.terminal.useEnvFile": true,
   "ruff.interpreter": [
     "${workspaceFolder}/apps/api/.venv/bin/ruff"
   ]

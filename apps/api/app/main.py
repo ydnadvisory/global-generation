@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, status
 
+from app.config import Settings
 from app.exercises import EXERCISE, PASSING_PERCENT, TextRange, find_question, score_coverage
 from app.models.api_models import (
     CoverageScore,
@@ -15,6 +16,10 @@ from app.models.api_models import (
 
 app = FastAPI(title="global-generation-api", version="0.1.0")
 
+config = Settings()
+
+api_version = config.API_V1_STR
+
 
 @app.get("/", response_model=HealthResponse)
 def root() -> HealthResponse:
@@ -26,7 +31,7 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@app.get("/api/exercises/{exercise_id}", response_model=PublicExercise)
+@app.get(f"{api_version}/exercises/{{exercise_id}}", response_model=PublicExercise)
 def get_exercise(exercise_id: str) -> PublicExercise:
     if exercise_id != EXERCISE.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
@@ -45,7 +50,7 @@ def get_exercise(exercise_id: str) -> PublicExercise:
     )
 
 
-@app.post("/api/exercises/generated", response_model=GenerateExerciseResponse)
+@app.post(f"{api_version}/exercises/generated", response_model=GenerateExerciseResponse)
 def generate_exercise(request: GenerateExerciseRequest) -> GenerateExerciseResponse:
     return GenerateExerciseResponse(
         exercise=PublicExercise(
@@ -64,7 +69,7 @@ def generate_exercise(request: GenerateExerciseRequest) -> GenerateExerciseRespo
 
 
 @app.post(
-    "/api/exercises/{exercise_id}/submissions",
+    f"{api_version}/exercises/{{exercise_id}}/submissions",
     response_model=SubmissionResponse,
 )
 def submit_exercise(exercise_id: str, submission: SubmissionRequest) -> SubmissionResponse:
