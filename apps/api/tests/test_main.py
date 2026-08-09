@@ -47,3 +47,14 @@ def test_submission_rejects_ranges_outside_the_exercise() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_submission_rejects_invalid_question_id() -> None:
+    response = client.post(
+        "/api/exercises/generated",
+        json={
+            "difficulty": "easy",
+        },
+    )
+
+    assert response.status_code == 200

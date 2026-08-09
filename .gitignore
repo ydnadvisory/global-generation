@@ -42,7 +42,6 @@ htmlcov/
 
 # Editor and operating-system metadata
 .DS_Store
-.vscode/
 .idea/
 .docs/
 

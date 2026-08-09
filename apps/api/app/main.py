@@ -1,58 +1,17 @@
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field, model_validator
 
 from app.exercises import EXERCISE, PASSING_PERCENT, TextRange, find_question, score_coverage
-
-
-class HealthResponse(BaseModel):
-    status: str
-
-
-class SelectionRange(BaseModel):
-    start: int = Field(ge=0)
-    end: int = Field(ge=0)
-
-    @model_validator(mode="after")
-    def has_positive_length(self) -> "SelectionRange":
-        if self.end <= self.start:
-            raise ValueError("end must be greater than start")
-        return self
-
-
-class PublicQuestion(BaseModel):
-    id: str
-    prompt: str
-
-
-class PublicExercise(BaseModel):
-    id: str
-    section: str
-    difficulty: str
-    title: str
-    instruction: str
-    text: str
-    questions: list[PublicQuestion]
-
-
-class SubmissionRequest(BaseModel):
-    question_id: str
-    selected_ranges: list[SelectionRange] = Field(min_length=1)
-
-
-class CoverageScore(BaseModel):
-    covered_characters: int
-    correct_characters: int
-    incorrect_characters: int
-    penalty_characters: float
-    selected_characters: int
-    percent: int
-
-
-class SubmissionResponse(BaseModel):
-    passed: bool
-    score: CoverageScore
-    correct_ranges: list[SelectionRange]
-
+from app.models.api_models import (
+    CoverageScore,
+    GenerateExerciseRequest,
+    GenerateExerciseResponse,
+    HealthResponse,
+    PublicExercise,
+    PublicQuestion,
+    SelectionRange,
+    SubmissionRequest,
+    SubmissionResponse,
+)
 
 app = FastAPI(title="global-generation-api", version="0.1.0")
 
@@ -83,6 +42,24 @@ def get_exercise(exercise_id: str) -> PublicExercise:
             PublicQuestion(id=question.id, prompt=question.prompt)
             for question in EXERCISE.questions
         ],
+    )
+
+
+@app.post("/api/exercises/generated", response_model=GenerateExerciseResponse)
+def generate_exercise(request: GenerateExerciseRequest) -> GenerateExerciseResponse:
+    return GenerateExerciseResponse(
+        exercise=PublicExercise(
+            id=EXERCISE.id,
+            section=EXERCISE.section,
+            difficulty=EXERCISE.difficulty,
+            title=EXERCISE.title,
+            instruction=EXERCISE.instruction,
+            text=EXERCISE.text,
+            questions=[
+                PublicQuestion(id=question.id, prompt=question.prompt)
+                for question in EXERCISE.questions
+            ],
+        )
     )
 
 
