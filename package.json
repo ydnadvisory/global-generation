@@ -4,11 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "dev": "npm run web:dev",
+    "web:dev": "cd apps/web && vite",
+    "web:build": "cd apps/web && tsc -b && vite build",
+    "web:preview": "cd apps/web && vite preview",
+    "web:test": "cd apps/web && vitest run",
+    "web:test:coverage": "cd apps/web && vitest run --coverage",
+    "api:dev": "python -m uvicorn app.main:app --reload --app-dir apps/api",
+    "api:start": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir apps/api"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
