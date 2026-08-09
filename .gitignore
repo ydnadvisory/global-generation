@@ -6,13 +6,30 @@ apps/web/dist/
 # Python
 .venv/
 venv/
+env/
+ENV/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+*.whl
+build/
+__pypackages__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.ipynb_checkpoints/
 
 # Local environment files
 .env

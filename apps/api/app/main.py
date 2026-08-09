@@ -99,8 +99,7 @@ def submit_exercise(exercise_id: str, submission: SubmissionRequest) -> Submissi
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
     selected_ranges: tuple[TextRange, ...] = tuple(
-        (selected_range.start, selected_range.end)
-        for selected_range in submission.selected_ranges
+        (selected_range.start, selected_range.end) for selected_range in submission.selected_ranges
     )
     if any(end > len(EXERCISE.text) for _, end in selected_ranges):
         raise HTTPException(
@@ -111,9 +110,15 @@ def submit_exercise(exercise_id: str, submission: SubmissionRequest) -> Submissi
     score = score_coverage(selected_ranges, question.correct_ranges)
     return SubmissionResponse(
         passed=score["percent"] >= PASSING_PERCENT,
-        score=CoverageScore(**score),
+        score=CoverageScore(
+            covered_characters=int(score["covered_characters"]),
+            correct_characters=int(score["correct_characters"]),
+            incorrect_characters=int(score["incorrect_characters"]),
+            penalty_characters=score["penalty_characters"],
+            selected_characters=int(score["selected_characters"]),
+            percent=int(score["percent"]),
+        ),
         correct_ranges=[
-            SelectionRange(start=start, end=end)
-            for start, end in question.correct_ranges
+            SelectionRange(start=start, end=end) for start, end in question.correct_ranges
         ],
     )
