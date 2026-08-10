@@ -14,6 +14,11 @@ Select the words that support an answer. Submit them. Get a transparent score.
   <img alt="Tests" src="https://img.shields.io/badge/tests-Vitest%20%2B%20pytest-6E9F18" />
 </p>
 
+<p>
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-current-2563EB?style=for-the-badge" /></a>
+  <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/Russian-translation-64748B?style=for-the-badge" /></a>
+</p>
+
 </div>
 
 ## Stack
