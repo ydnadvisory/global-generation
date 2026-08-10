@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pytest_mock import MockerFixture
 
-from app.main import app, get_question_generator
+from app.main import app, generated_exercises, get_question_generator
 from app.models.api_models import (
     GeneratedExercise,
     GeneratedQuestion,
@@ -17,9 +17,11 @@ from app.question_generator import QuestionGenerator
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     app.dependency_overrides.clear()
+    generated_exercises.clear()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    generated_exercises.clear()
 
 
 def valid_generated_exercise() -> GeneratedExercise:
@@ -118,7 +120,7 @@ def test_generate_exercise_rejects_invalid_request(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_generated_route_returns_complete_new_exercise(
+def test_generated_route_hides_answer_key_and_grades_server_side(
     client: TestClient, mocker: MockerFixture
 ) -> None:
     response, generator = post_with_generator(client, mocker, {"difficulty": "medium"})
@@ -128,7 +130,18 @@ def test_generated_route_returns_complete_new_exercise(
     assert payload["exercise"]["id"].startswith("generated-")
     assert payload["exercise"]["difficulty"] == "medium"
     assert len(payload["exercise"]["questions"]) == 3
-    assert "correct_ranges" in payload["exercise"]["questions"][0]
+    assert "correct_ranges" not in response.text
+
+    submission = client.post(
+        f"/api/exercises/{payload['exercise']['id']}/submissions",
+        json={
+            "question_id": "question-1",
+            "selected_ranges": [{"start": 0, "end": 1}],
+        },
+    )
+
+    assert submission.status_code == 200
+    assert submission.json()["passed"] is True
     generator.generate.assert_called_once()
 
 

@@ -88,7 +88,7 @@ class GenerateExerciseRequest(BaseModel):
 
 
 class GeneratedQuestion(QuestionBase):
-    """The trusted generated response, including the resolved answer key."""
+    """Trusted generated question, including its server-side answer key."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -96,7 +96,7 @@ class GeneratedQuestion(QuestionBase):
 
 
 class GeneratedExercise(ExerciseBase[GeneratedQuestion]):
-    """The trusted generated response returned by the API."""
+    """Trusted generated exercise retained by the server for grading."""
 
     questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
 
@@ -125,7 +125,7 @@ class EvidenceValidationResult(BaseModel):
 
 
 class GenerateExerciseResponse(BaseModel):
-    exercise: GeneratedExercise
+    exercise: PublicExercise
 
 
 class GenerationError(Exception):

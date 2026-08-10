@@ -4,6 +4,14 @@ This guide is the implementation specification for `apps/api`. Follow it in orde
 The target is a real, testable `POST /api/exercises/generated` endpoint. Do not leave the
 route backed by the static `EXERCISE` fixture.
 
+> [!IMPORTANT]
+> This lab originally described an author-preview response that included
+> `correct_ranges`. The learner-facing implementation has since superseded that
+> contract: generated answer keys remain server-side, `POST /api/exercises/generated`
+> returns a `PublicExercise`, and `POST /api/exercises/{exercise_id}/submissions`
+> grades the generated exercise. The in-memory generated-exercise store is intentionally
+> prototype-only; exercises disappear after an API restart and are not shared across instances.
+
 The implementation must use the model only to generate content. The API must validate the
 model's structured result before returning it. A provider failure or malformed result must
 never produce a partial exercise.

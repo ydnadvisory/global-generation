@@ -19,11 +19,10 @@ import {
   getExercise,
   submitAnswer,
   type EvidenceExercise,
-  type GeneratedEvidenceExercise,
   type SubmissionResult,
   type TextRange,
 } from "./api";
-import { addRange, getSelectionRange, scoreCoverage } from "./utils";
+import { addRange, getSelectionRange } from "./utils";
 
 const navItems = [
   { label: "Главная", icon: Home },
@@ -34,10 +33,10 @@ const navItems = [
 
 type AnswersByQuestion = Record<string, TextRange[]>;
 type SubmissionsByQuestion = Record<string, SubmissionResult>;
-type LoadedExercise = EvidenceExercise | GeneratedEvidenceExercise;
 
 function App() {
-  const [exercise, setExercise] = useState<LoadedExercise | null>(null);
+  const [exercise, setExercise] = useState<EvidenceExercise | null>(null);
+  const [canRegenerate, setCanRegenerate] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersByQuestion>({});
@@ -54,15 +53,25 @@ function App() {
     let mounted = true;
 
     getGeneratedExercise()
-      .catch(() => getExercise())
       .then((loadedExercise) => {
         if (!mounted) return;
 
         setExercise(loadedExercise);
+        setCanRegenerate(true);
         setActiveQuestionId(loadedExercise.questions[0]?.id ?? null);
       })
       .catch(() => {
-        if (mounted) setLoadError("Не удалось загрузить упражнение.");
+        getExercise()
+          .then((fallbackExercise) => {
+            if (!mounted) return;
+
+            setExercise(fallbackExercise);
+            setCanRegenerate(false);
+            setActiveQuestionId(fallbackExercise.questions[0]?.id ?? null);
+          })
+          .catch(() => {
+            if (mounted) setLoadError("Не удалось загрузить упражнение.");
+          });
       });
 
     return () => {
@@ -78,8 +87,7 @@ function App() {
     return <LoadingExercise />;
   }
 
-  const loadedExercise: EvidenceExercise = exercise;
-  const canRegenerate = "correctRangesByQuestion" in exercise;
+  const loadedExercise = exercise;
 
   const selectedQuestion = loadedExercise.questions.find(
     ({ id }) => id === activeQuestionId,
@@ -139,6 +147,7 @@ function App() {
     try {
       const freshExercise = await getGeneratedExercise("medium");
       setExercise(freshExercise);
+      setCanRegenerate(true);
       setActiveQuestionId(freshExercise.questions[0]?.id ?? null);
       setAnswers({});
       setSubmissions({});
@@ -157,27 +166,11 @@ function App() {
     setSubmittingQuestionId(currentQuestion.id);
 
     try {
-      const generatedRanges = "correctRangesByQuestion" in loadedExercise
-        ? (loadedExercise as GeneratedEvidenceExercise).correctRangesByQuestion
-        : undefined;
-      let result: SubmissionResult;
-      if (generatedRanges) {
-        const score = scoreCoverage(
-          activeRanges,
-          generatedRanges[currentQuestion.id] ?? [],
-        );
-        result = {
-          passed: score.percent >= 70,
-          score,
-          correctRanges: generatedRanges[currentQuestion.id] ?? [],
-        };
-      } else {
-        result = await submitAnswer(
-          loadedExercise.id,
-          currentQuestion.id,
-          activeRanges,
-        );
-      }
+      const result = await submitAnswer(
+        loadedExercise.id,
+        currentQuestion.id,
+        activeRanges,
+      );
       setSubmissions((current) => ({
         ...current,
         [currentQuestion.id]: result,

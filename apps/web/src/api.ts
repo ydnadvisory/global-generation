@@ -15,10 +15,6 @@ export type EvidenceExercise = {
   questions: readonly EvidenceQuestion[];
 };
 
-export type GeneratedEvidenceExercise = EvidenceExercise & {
-  correctRangesByQuestion: Readonly<Record<string, readonly TextRange[]>>;
-};
-
 export type CoverageScore = {
   coveredCharacters: number;
   correctCharacters: number;
@@ -39,14 +35,8 @@ type ApiRange = {
   end: number;
 };
 
-type ApiGeneratedExercise = Omit<EvidenceExercise, "questions"> & {
-  questions: readonly (EvidenceQuestion & {
-    correct_ranges: readonly ApiRange[];
-  })[];
-};
-
 type ApiGeneratedExerciseResponse = {
-  exercise: ApiGeneratedExercise;
+  exercise: EvidenceExercise;
 };
 
 type ApiSubmissionResult = {
@@ -98,7 +88,7 @@ export function getExercise(): Promise<EvidenceExercise> {
 
 export async function getGeneratedExercise(
   difficulty = "medium",
-): Promise<GeneratedEvidenceExercise> {
+): Promise<EvidenceExercise> {
   const result = await request<ApiGeneratedExerciseResponse>(
     "/api/exercises/generated",
     {
@@ -108,16 +98,7 @@ export async function getGeneratedExercise(
     },
   );
 
-  return {
-    ...result.exercise,
-    questions: result.exercise.questions.map(({ id, prompt }) => ({ id, prompt })),
-    correctRangesByQuestion: Object.fromEntries(
-      result.exercise.questions.map(({ id, correct_ranges }) => [
-        id,
-        correct_ranges.map(({ start, end }) => [start, end] as TextRange),
-      ]),
-    ),
-  };
+  return result.exercise;
 }
 
 export async function submitAnswer(
