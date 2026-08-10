@@ -1,8 +1,20 @@
+<div align="center">
+
 # Find the Evidence
 
-SAT-style Reading & Writing practice. Learners highlight evidence in a shared
-passage, submit selections, and receive a transparent score. The API keeps
-answer keys server-side.
+### Reading & Writing practice built around proof, not guessing.
+
+Select the words that support an answer. Submit them. Get a transparent score.
+
+<p>
+  <img alt="React" src="https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-first-2496ED?logo=docker&logoColor=white" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-Vitest%20%2B%20pytest-6E9F18" />
+</p>
+
+</div>
 
 ## Stack
 
