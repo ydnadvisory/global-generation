@@ -8,6 +8,6 @@
   ],
   "python.terminal.useEnvFile": true,
   "ruff.interpreter": [
-    "${workspaceFolder}/apps/api/.venv/bin/ruff"
+    "${workspaceFolder}/apps/api/.venv/bin/python"
   ]
 }

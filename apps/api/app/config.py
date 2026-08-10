@@ -10,4 +10,7 @@ class Settings:
     PROJECT_NAME: str = "Global Generation"
     API_V1_STR: str = "/api"
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
-    OPEN_API_KEY: str | None = os.getenv("OPEN_AI_KEY", None)
+
+    # OpenAI API settings
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY", None)
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

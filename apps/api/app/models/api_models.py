@@ -79,3 +79,38 @@ class GenerateExerciseRequest(BaseModel):
 
 class GenerateExerciseResponse(BaseModel):
     exercise: PublicExercise
+
+
+class GeneratedQuestion(BaseModel):
+    """The model/provider output, including the answer key for trusted use."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    correct_ranges: list[SelectionRange] = Field(min_length=1)
+
+
+class GeneratedExercise(BaseModel):
+    """Strict structured output expected from the question generator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: str = Field(min_length=1)
+    difficulty: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
+
+
+class GenerationError(Exception):
+    """Base class for errors that should become HTTP 502."""
+
+
+class UpstreamGenerationError(GenerationError):
+    """The provider could not produce a result."""
+
+
+class InvalidGeneratedExerciseError(GenerationError):
+    """The provider returned data that failed independent validation."""

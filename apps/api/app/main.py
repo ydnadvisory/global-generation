@@ -1,4 +1,7 @@
+from functools import lru_cache
+
 from fastapi import FastAPI, HTTPException, status
+from langchain_openai import ChatOpenAI
 
 from app.config import Settings
 from app.exercises import EXERCISE, PASSING_PERCENT, TextRange, find_question, score_coverage
@@ -13,12 +16,29 @@ from app.models.api_models import (
     SubmissionRequest,
     SubmissionResponse,
 )
+from app.question_generator import QuestionGenerator
 
 app = FastAPI(title="global-generation-api", version="0.1.0")
 
 config = Settings()
 
 api_version = config.API_V1_STR
+
+
+@lru_cache
+def get_question_generator() -> "QuestionGenerator":
+    from app.question_generator import QuestionGenerator
+
+    if not config.OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is not set in the environment")
+
+    model = ChatOpenAI(
+        model_name=config.OPENAI_MODEL,
+        openai_api_key=config.OPENAI_API_KEY,
+        temperature=0.7,
+        max_tokens=1500,
+    )
+    return QuestionGenerator(model)
 
 
 @app.get("/", response_model=HealthResponse)

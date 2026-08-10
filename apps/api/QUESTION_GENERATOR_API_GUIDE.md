@@ -1,210 +1,713 @@
-# Lab: Generate an evidence exercise with OpenAI
+# Teaching lab: implement the generated-exercise API
 
-## Lab outcome
+This guide is the implementation specification for `apps/api`. Follow it in order.
+The target is a real, testable `POST /api/exercises/generated` endpoint. Do not leave the
+route backed by the static `EXERCISE` fixture.
 
-Add `POST /api/exercises/generated`. It accepts only a difficulty, asks a
-`QuestionGenerator` service to create one text and exactly three evidence-selection
-questions, then returns an `Exercise`-shaped response similar to `get_exercise`.
+The implementation must use the model only to generate content. The API must validate the
+model's structured result before returning it. A provider failure or malformed result must
+never produce a partial exercise.
 
-Every successful call creates a **new** text, three questions, and their correct answer
-ranges. The response is a complete new exercise set; it does not reuse `EXERCISE`.
+## Dependency baseline
 
-**You will practise:** FastAPI request validation, a service boundary, LangChain
-structured output, and validating AI-generated character offsets.
+This lab uses the versions resolved in `apps/api/uv.lock` on 10 August 2026:
 
-> The current public `get_exercise` response deliberately hides `correct_ranges`.
-> Returning them makes this endpoint suitable for author preview, moderation, or
-> trusted users only. Do not expose it to learners before grading is complete.
+| Package | Role | Version |
+|---|---|---:|
+| Python | Runtime | `>=3.12` |
+| python-dotenv | Environment configuration | `0.9.9` |
+| FastAPI | API framework | `0.141.1` |
+| Uvicorn | ASGI server | `0.52.1` |
+| LangChain | Structured model orchestration | `1.3.14` |
+| langchain-openai | OpenAI chat-model integration | `1.4.2` |
+| HTTPX | Test client dependency | `0.28.1` |
+| pytest | Test runner | `9.1.1` |
+| pytest-mock | Mocking support | `3.15.1` |
+| Ruff | Linter | `0.16.2` |
 
-## Step 1 — define the contract
+The direct constraints are declared in `apps/api/pyproject.toml`; the exact transitive
+resolution is recorded in `apps/api/uv.lock`. Do not manually edit the lockfile. Use `uv`
+to resolve it.
 
-```json
+## 1. Target behaviour
+
+### Request
+
+The only client-controlled field is `difficulty`:
+
+```http
 POST /api/exercises/generated
-{
-  "difficulty": "Средний"
-}
+Content-Type: application/json
 ```
 
 ```json
 {
-  "id": "generated-uuid",
-  "section": "Reading & Writing",
-  "difficulty": "Средний",
-  "title": "Evidence practice",
-  "instruction": "Select evidence in the text for each question.",
-  "text": "...",
-  "questions": [
-    {
-      "id": "question-1",
-      "prompt": "...",
-      "correct_ranges": [{ "start": 12, "end": 44 }]
-    }
-  ]
+  "difficulty": "medium"
 }
 ```
 
-`difficulty` is the only required client input. Configure the request model with
-`extra="forbid"`: reject `topic`, `language`, and all other fields. The service chooses
-a random suitable topic; all generated text and questions are English by default.
-
-Validate supported difficulty, exactly three questions, unique IDs,
-`0 <= start < end <= len(text)`, and at least one range per question. Return `422` for
-invalid client input and `502` for an unusable model result or OpenAI/LangChain failure.
-Never return a partial exercise.
-
-**Checkpoint:** a request is either rejected before the model is called, or produces one
-complete exercise with exactly three questions.
-
-**Test task:** create a FastAPI test that sends only a valid `difficulty` and asserts
-`200`. Send an unsupported difficulty and a request containing `topic`; each must return
-`422`. Use a fake generator: this test must not call OpenAI.
-
-## Step 2 — keep responsibilities separate
-
-```
-app/
-  main.py                  # request/response models and route
-  question_generator.py    # QuestionGenerator and OpenAI/LangChain call
-  exercises.py             # existing static exercise and grading logic
-```
-
-Keep the route thin:
-
-1. Parse `GenerateExerciseRequest`.
-2. Call `QuestionGenerator.generate(request)`.
-3. Validate the generated result with a strict output model.
-4. Convert it to the response model and return it.
-
-`QuestionGenerator` owns prompt construction and the AI call. Inject the chat model
-into its constructor so tests can replace it with a fake. Read `OPENAI_API_KEY` from
-the environment; never log the key, full prompt, or generated learner data.
-
-## Step 3 — use this valid prompt
-
-Pass the validated difficulty into this template. Use it as the system/developer
-instruction; the Pydantic model supplied to `with_structured_output` defines the
-response schema.
+Supported values are the values already used by `GenerateExerciseRequest`:
 
 ```text
-You create Reading & Writing evidence-selection exercises.
+easy
+medium
+hard
+```
 
-Choose one suitable, age-appropriate academic topic at random. Create one original
-English text about that topic. Difficulty: {difficulty}.
+The request model must reject every extra field. These requests must return `422` without
+calling the model:
 
-Return exactly three questions. Each question must ask the learner to select evidence
-from the text. For every question, provide one or more correct_ranges using character
-offsets in the final text: start is inclusive and end is exclusive.
+```json
+{"difficulty": "medium", "topic": "water treatment"}
+```
+
+```json
+{"difficulty": "expert"}
+```
+
+The caller cannot choose the topic or language. The service chooses an age-appropriate topic
+and generates English text.
+
+### Successful response
+
+Keep the existing response wrapper. The response is `GenerateExerciseResponse`, so the JSON
+shape is:
+
+```json
+{
+  "exercise": {
+    "id": "generated-6f2e7d7a-7d18-4b3c-a7e4-0f4c7af5d0ce",
+    "section": "Reading & Writing",
+    "difficulty": "medium",
+    "title": "Evidence practice",
+    "instruction": "Select evidence in the text for each question.",
+    "text": "A complete original English passage.",
+    "questions": [
+      {
+        "id": "question-1",
+        "prompt": "Which words show the main change described in the passage?",
+        "correct_ranges": [{"start": 10, "end": 35}]
+      },
+      {
+        "id": "question-2",
+        "prompt": "Which words provide evidence for the result?",
+        "correct_ranges": [{"start": 42, "end": 64}]
+      },
+      {
+        "id": "question-3",
+        "prompt": "Which words show a limitation or condition?",
+        "correct_ranges": [{"start": 70, "end": 96}]
+      }
+    ]
+  }
+}
+```
+
+The generated response is an author-preview/trusted-user response because it contains
+`correct_ranges`. The existing public `GET /api/exercises/{exercise_id}` response must
+continue to hide answer keys.
+
+### Status codes
+
+| Situation | Status | Required behaviour |
+|---|---:|---|
+| Valid request and valid generated exercise | `200` | Return one complete exercise |
+| Unsupported difficulty, missing difficulty, wrong type, or extra field | `422` | FastAPI/Pydantic rejects before the model call |
+| Provider timeout, authentication failure, model invocation failure | `502` | Return a generic upstream error; do not leak provider details |
+| Valid model call but malformed/unsafe structured result | `502` | Reject the entire result; never return a partial exercise |
+
+## 2. Files to change
+
+Implement the feature in these files:
+
+```text
+apps/api/
+├── app/
+│   ├── config.py                 # model name and API-key settings
+│   ├── main.py                   # dependency, route, and error mapping
+│   ├── models/api_models.py      # request, structured-output, and response models
+│   └── question_generator.py     # prompt, model call, and independent validation
+├── tests/
+│   ├── test_main.py              # route and regression tests
+│   └── test_question_generator.py# prompt, validation, and provider-boundary tests
+├── .env.example                  # variable names, never a real secret
+├── pyproject.toml                # LangChain OpenAI integration dependency
+└── uv.lock                       # regenerated by uv
+```
+
+Do not move the existing static exercise or grading functions. Do not expose its answer
+ranges through the public `GET` route.
+
+## 3. Add strict data models
+
+Edit `apps/api/app/models/api_models.py`.
+
+Keep the existing `SelectionRange`, `PublicQuestion`, `PublicExercise`, and submission
+models. Add the following models after `GenerateExerciseRequest` (or place them together in
+an obvious generated-exercise section):
+
+```python
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class GeneratedQuestion(BaseModel):
+    """The model/provider output, including the answer key for trusted use."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    correct_ranges: list[SelectionRange] = Field(min_length=1)
+
+
+class GeneratedExercise(BaseModel):
+    """Strict structured output expected from the question generator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: str = Field(min_length=1)
+    difficulty: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
+
+
+class GenerationError(Exception):
+    """Base class for errors that should become HTTP 502."""
+
+
+class UpstreamGenerationError(GenerationError):
+    """The provider could not produce a result."""
+
+
+class InvalidGeneratedExerciseError(GenerationError):
+    """The provider returned data that failed independent validation."""
+```
+
+`SelectionRange` already enforces `start >= 0`, `end >= 0`, and `end > start`. It does not
+know the generated text length, so that boundary must be checked separately after the whole
+text is available.
+
+Add the following explicit validator in `question_generator.py`, not only in the route:
+
+```python
+from app.models.api_models import (
+    GeneratedExercise,
+    InvalidGeneratedExerciseError,
+)
+
+
+def validate_generated_exercise(
+    exercise: GeneratedExercise,
+    *,
+    expected_difficulty: str | None = None,
+) -> GeneratedExercise:
+    if expected_difficulty is not None and exercise.difficulty != expected_difficulty:
+        raise InvalidGeneratedExerciseError(
+            "generated difficulty must match the validated request"
+        )
+
+    if len(exercise.questions) != 3:
+        raise InvalidGeneratedExerciseError("generated exercise must contain exactly 3 questions")
+
+    question_ids = [question.id for question in exercise.questions]
+    if len(set(question_ids)) != len(question_ids):
+        raise InvalidGeneratedExerciseError("generated question ids must be unique")
+
+    text_length = len(exercise.text)
+    for question in exercise.questions:
+        if not question.correct_ranges:
+            raise InvalidGeneratedExerciseError(
+                f"question {question.id!r} must contain at least one correct range"
+            )
+
+        for text_range in question.correct_ranges:
+            if not 0 <= text_range.start < text_range.end <= text_length:
+                raise InvalidGeneratedExerciseError(
+                    f"range for question {question.id!r} is outside the generated text"
+                )
+
+    return exercise
+```
+
+The validator is intentionally independent of the model. A prompt is not a security or
+correctness boundary.
+
+## 4. Replace the placeholder generator
+
+Replace the current placeholder implementation in
+`apps/api/app/question_generator.py`. The current method calls `model.generate(request)` and
+returns a string; that is not sufficient for this feature.
+
+Use this implementation shape:
+
+```python
+from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import ChatPromptTemplate
+
+from app.models.api_models import (
+    GeneratedExercise,
+    GenerateExerciseRequest,
+    InvalidGeneratedExerciseError,
+    UpstreamGenerationError,
+)
+
+
+PROMPT_TEMPLATE = """You create Reading & Writing evidence-selection exercises.
+
+Choose one suitable, age-appropriate academic topic at random. Create one original English
+text about that topic. Difficulty: {difficulty}.
+
+Return exactly three questions. Each question must ask the learner to select evidence from
+the text. For every question, provide one or more correct_ranges using character offsets in
+the final text: start is inclusive and end is exclusive.
 
 Rules:
 - Write the complete final text before calculating offsets.
 - Do not change the text after calculating offsets.
 - Every range must satisfy 0 <= start < end <= length of the final text.
-- Use distinct question IDs and do not return explanations, Markdown, or extra fields.
+- Use distinct question IDs.
+- Return no explanations, Markdown, or extra fields.
+- Return English text and English questions.
 - Return data matching the supplied structured-output schema only.
-```
+"""
 
-Build the prompt from this fixed template and the validated difficulty. Do not allow the
-caller to inject a topic or choose the output language.
 
-**Checkpoint:** test the prompt with a fake model first. The service must reject a
-result with four questions or an out-of-bounds range.
+def build_prompt(request: GenerateExerciseRequest) -> str:
+    return PROMPT_TEMPLATE.format(difficulty=request.difficulty)
 
-**Test task:** create a unit test for `build_prompt`. Assert that it contains the
-difficulty, English-language rule, random-topic instruction, exactly-three requirement,
-and inclusive/exclusive offset rule.
 
-## Step 4 — validate the AI result
-
-Use a structured-output Pydantic model, not free-form JSON parsing. In the prompt,
-require the model to return text first and character offsets that refer to that exact
-text. Ask it not to change the text after calculating ranges.
-
-After the response, independently check every range against `text`. Character offsets
-are Python string offsets: start inclusive, end exclusive, matching the existing
-`TextRange` contract and browser selection API.
-
-**Test task:** create parameterised validator tests for: four questions, duplicate IDs,
-`start == end`, a negative start, and an `end` greater than `len(text)`. Each case must
-fail before the route returns a response.
-
-## Step 5 — implementation outline
-
-```python
 class QuestionGenerator:
-    def __init__(self, model: Runnable) -> None:
-        self.model = model
+    def __init__(self, model: BaseChatModel) -> None:
+        self.model = model.with_structured_output(GeneratedExercise)
 
     def generate(self, request: GenerateExerciseRequest) -> GeneratedExercise:
-        prompt = build_prompt(request)
-        result = self.model.with_structured_output(GeneratedExercise).invoke(prompt)
-        validate_generated_exercise(result)
-        return result
+        try:
+            result = self.model.invoke(build_prompt(request))
+            exercise = GeneratedExercise.model_validate(result)
+        except InvalidGeneratedExerciseError:
+            raise
+        except Exception as exc:
+            # Log the exception with normal application logging if required, but never put
+            # the provider message or API key in the HTTP response.
+            raise UpstreamGenerationError("question provider failed") from exc
+
+        return validate_generated_exercise(exercise, expected_difficulty=request.difficulty)
 ```
 
-Create the real model once during application startup/configuration, for example with
-`ChatOpenAI(model="...", temperature=...)`. Choose the model name from an environment
-variable. Do not instantiate the client for every request.
+If the installed LangChain version exposes `Runnable` rather than `BaseChatModel` for the
+injected type, use the project’s installed import and type the constructor as the narrowest
+protocol needed by the tests. The required runtime behaviour is unchanged:
 
-**Test task:** create a route test where the fake generator raises an upstream error.
-Assert `502` and assert that the response does not contain the provider exception text.
+1. Construct the structured-output model once.
+2. Invoke it with the fixed prompt.
+3. Parse into `GeneratedExercise`.
+4. Independently validate text offsets.
+5. Return only a complete valid result.
 
-### Pytest mocking reminder
+Do not use `json.loads` on free-form model text. Do not accept a dictionary with unknown
+fields. Do not retry automatically unless the retry policy is explicitly bounded and has
+valid semantics; one provider call is enough for this lab.
 
-Make the route depend on `get_question_generator`, then override that dependency in
-tests. This keeps all tests offline: no API key and no OpenAI request are needed.
+## 5. Create the real model once
+
+Add configuration in `apps/api/app/config.py`. Correct the existing naming inconsistency:
+the repository currently uses `OPEN_AI_KEY`; standardise on `OPENAI_API_KEY`.
+
+```python
+class Settings:
+    PROJECT_NAME: str = "Global Generation"
+    API_V1_STR: str = "/api"
+    BACKEND_CORS_ORIGINS: list[str] = ["*"]
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+```
+
+Update `apps/api/.env.example`:
+
+```dotenv
+OPENAI_API_KEY=replace-with-a-local-key
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Never commit a real key. Never print the key, full prompt, or generated learner content in a
+test or log message.
+
+In `main.py`, construct the provider model in an application-level dependency. Keep the
+dependency injectable so route tests never need a key:
+
+```python
+from functools import lru_cache
+
+from fastapi import Depends
+from langchain_openai import ChatOpenAI
+
+from app.config import Settings
+from app.question_generator import QuestionGenerator
+
+
+@lru_cache
+def get_question_generator() -> QuestionGenerator:
+    settings = Settings()
+    if not settings.OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is required for generated exercises")
+
+    model = ChatOpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        model=settings.OPENAI_MODEL,
+        temperature=0.7,
+    )
+    return QuestionGenerator(model)
+```
+
+Do not construct `ChatOpenAI` inside the route. The cache prevents a new client/model wrapper
+being built on every request.
+
+The OpenAI integration is already a direct dependency. From `apps/api`, synchronize the
+environment and verify that the lockfile matches the manifest:
+
+```bash
+uv sync
+uv lock --check
+```
+
+When changing a dependency constraint, run `uv lock` after editing `pyproject.toml`, then
+run `uv sync`. Keep `langchain-openai` declared directly even though LangChain also has
+transitive dependencies that provide `langchain-core`.
+
+## 6. Implement the route and response conversion
+
+First replace the current `GenerateExerciseResponse` definition in
+`apps/api/app/models/api_models.py`. Do not add `correct_ranges` to `PublicQuestion`, because
+that model is used by the learner-facing static endpoint. Add these trusted generated-output
+models instead:
+
+```python
+class GeneratedPublicQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    prompt: str
+    correct_ranges: list[SelectionRange] = Field(min_length=1)
+
+
+class GeneratedPublicExercise(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    section: str
+    difficulty: str
+    title: str
+    instruction: str
+    text: str
+    questions: list[GeneratedPublicQuestion] = Field(min_length=3, max_length=3)
+
+
+class GenerateExerciseResponse(BaseModel):
+    exercise: GeneratedPublicExercise
+```
+
+Then add the dependency to the route in `apps/api/app/main.py`:
+
+```python
+from fastapi import Depends, HTTPException, status
+
+from app.models.api_models import (
+    GeneratedExercise,
+    GenerateExerciseRequest,
+    GenerateExerciseResponse,
+    GeneratedPublicExercise,
+    GeneratedPublicQuestion,
+)
+from app.question_generator import (
+    InvalidGeneratedExerciseError,
+    QuestionGenerator,
+    UpstreamGenerationError,
+)
+
+
+def generated_to_response(exercise: GeneratedExercise) -> GenerateExerciseResponse:
+    return GenerateExerciseResponse(
+        exercise=GeneratedPublicExercise(
+            id=f"generated-{uuid4()}",
+            section=exercise.section,
+            difficulty=exercise.difficulty,
+            title=exercise.title,
+            instruction=exercise.instruction,
+            text=exercise.text,
+            questions=[
+                GeneratedPublicQuestion(
+                    id=question.id,
+                    prompt=question.prompt,
+                    correct_ranges=question.correct_ranges,
+                )
+                for question in exercise.questions
+            ],
+        )
+    )
+
+
+@app.post(f"{api_version}/exercises/generated", response_model=GenerateExerciseResponse)
+def generate_exercise(
+    request: GenerateExerciseRequest,
+    generator: QuestionGenerator = Depends(get_question_generator),
+) -> GenerateExerciseResponse:
+    try:
+        generated = generator.generate(request)
+    except (InvalidGeneratedExerciseError, UpstreamGenerationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Question generation failed",
+        ) from exc
+
+    return generated_to_response(generated)
+```
+
+Add the missing import to `main.py`:
+
+```python
+from uuid import uuid4
+```
+
+The generated ID is assigned by the API, not the model. The model must not be able to choose
+an existing static exercise ID.
+
+## 7. Write the tests before enabling a real key
+
+All tests must be offline. Use a fake generator through FastAPI dependency overrides. Never
+put an API key in test configuration.
+
+Create `apps/api/tests/test_question_generator.py`:
+
+```python
+import pytest
+
+from app.models.api_models import (
+    GeneratedExercise,
+    GeneratedQuestion,
+    GenerateExerciseRequest,
+    InvalidGeneratedExerciseError,
+    SelectionRange,
+)
+from app.question_generator import build_prompt, validate_generated_exercise
+
+
+def valid_generated_exercise() -> GeneratedExercise:
+    text = "A short passage about a scientific discovery."
+    return GeneratedExercise(
+        section="Reading & Writing",
+        difficulty="medium",
+        title="Evidence practice",
+        instruction="Select evidence.",
+        text=text,
+        questions=[
+            GeneratedQuestion(
+                id="question-1",
+                prompt="Which words show the discovery?",
+                correct_ranges=[SelectionRange(start=2, end=7)],
+            ),
+            GeneratedQuestion(
+                id="question-2",
+                prompt="Which words show the topic?",
+                correct_ranges=[SelectionRange(start=8, end=15)],
+            ),
+            GeneratedQuestion(
+                id="question-3",
+                prompt="Which words show the result?",
+                correct_ranges=[SelectionRange(start=16, end=25)],
+            ),
+        ],
+    )
+
+
+def test_build_prompt_contains_required_instructions() -> None:
+    prompt = build_prompt(GenerateExerciseRequest(difficulty="hard"))
+
+    assert "Difficulty: hard" in prompt
+    assert "original English text" in prompt
+    assert "exactly three questions" in prompt
+    assert "start is inclusive and end is exclusive" in prompt
+    assert "age-appropriate academic topic at random" in prompt
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda exercise: exercise.model_copy(
+                update={"questions": [*exercise.questions, exercise.questions[0]]}
+            ),
+            "3",
+        ),
+        (
+            lambda exercise: exercise.model_copy(
+                update={
+                    "questions": [
+                        exercise.questions[0],
+                        exercise.questions[0],
+                        exercise.questions[2],
+                    ]
+                }
+            ),
+            "unique",
+        ),
+        (
+            lambda exercise: exercise.model_copy(
+                update={
+                    "questions": [
+                        exercise.questions[0].model_copy(
+                            update={"correct_ranges": [SelectionRange(start=0, end=len(exercise.text) + 1)]}
+                        ),
+                        *exercise.questions[1:],
+                    ]
+                }
+            ),
+            "outside",
+        ),
+    ],
+)
+def test_invalid_generated_exercise_is_rejected(change, message: str) -> None:
+    with pytest.raises(InvalidGeneratedExerciseError, match=message):
+        validate_generated_exercise(change(valid_generated_exercise()))
+```
+
+Add separate cases for a negative start and `start == end`. Those should fail during
+`SelectionRange` construction with a Pydantic `ValidationError`, proving the model boundary
+rejects them before the independent text-length check. Add a case with an end greater than
+`len(text)`; it must raise `InvalidGeneratedExerciseError`.
+
+## 8. Test the route boundary
+
+In `apps/api/tests/test_main.py`, import the dependency and generator error:
 
 ```python
 from unittest.mock import Mock
 
-import pytest
-from fastapi.testclient import TestClient
-
 from app.main import app, get_question_generator
 from app.question_generator import QuestionGenerator, UpstreamGenerationError
-
-
-@pytest.fixture
-def fake_generator() -> Mock:
-    return Mock(spec=QuestionGenerator)
-
-
-def test_generates_new_exercise(fake_generator: Mock) -> None:
-    fake_generator.generate.return_value = generated_exercise
-    app.dependency_overrides[get_question_generator] = lambda: fake_generator
-    try:
-        response = TestClient(app).post("/api/exercises/generated", json=valid_request)
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    fake_generator.generate.assert_called_once()
-
-
-def test_hides_provider_error(fake_generator: Mock) -> None:
-    fake_generator.generate.side_effect = UpstreamGenerationError("OpenAI timeout")
-    # Apply the same dependency override, call the route, then assert 502.
+from tests.test_question_generator import valid_generated_exercise
 ```
 
-Use `return_value` for a successful fake and `side_effect` for an error. Always clear
-`app.dependency_overrides` in `finally`, otherwise one test can change another test.
+Use a fixture/helper that always clears overrides:
 
-## Step 6 — test and deliver
+```python
+def post_with_generator(generator: Mock, payload: dict):
+    app.dependency_overrides[get_question_generator] = lambda: generator
+    try:
+        return client.post("/api/exercises/generated", json=payload)
+    finally:
+        app.dependency_overrides.clear()
+```
 
-Add focused tests with a fake generator/model:
+Required route tests:
 
-- valid result returns `200` and three questions;
-- invalid range, duplicate ID, or not-three questions is rejected;
-- provider failure becomes `502` without leaking provider details;
-- static `GET /api/exercises/{exercise_id}` still does not expose answer keys.
+```python
+def test_generated_route_returns_complete_new_exercise() -> None:
+    generator = Mock(spec=QuestionGenerator)
+    generator.generate.return_value = valid_generated_exercise()
 
-Add pinned `langchain` and `langchain-openai` dependencies with `uv`, update
-`uv.lock`, document required environment variables, then run:
+    response = post_with_generator(generator, {"difficulty": "medium"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["exercise"]["id"].startswith("generated-")
+    assert payload["exercise"]["difficulty"] == "medium"
+    assert len(payload["exercise"]["questions"]) == 3
+    assert "correct_ranges" in payload["exercise"]["questions"][0]
+    generator.generate.assert_called_once()
+
+
+def test_generated_route_maps_provider_failure_to_502() -> None:
+    generator = Mock(spec=QuestionGenerator)
+    generator.generate.side_effect = UpstreamGenerationError("private provider detail")
+
+    response = post_with_generator(generator, {"difficulty": "medium"})
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Question generation failed"}
+    assert "private provider detail" not in response.text
+
+
+def test_extra_request_field_is_rejected_before_generator_call() -> None:
+    generator = Mock(spec=QuestionGenerator)
+
+    response = post_with_generator(
+        generator,
+        {"difficulty": "medium", "topic": "water treatment"},
+    )
+
+    assert response.status_code == 422
+    generator.generate.assert_not_called()
+```
+
+Also keep the existing regression test that `GET /api/exercises/rw-evidence-1` does not
+contain `correct_ranges`. The new generated response may contain answer keys; the static
+learner route must not.
+
+## 9. Verification sequence
+
+Run commands from `apps/api`:
 
 ```bash
-cd apps/api
+uv sync
+uv lock --check
 uv run pytest
 uv run ruff check .
 ```
 
-Before production, add authentication/rate limiting and persist generated exercises
-only after a moderation/quality-review decision.
+With Ruff `0.16.2`, the current workspace also reports two pre-existing findings outside
+the dependency change: `RUF012` for the mutable `BACKEND_CORS_ORIGINS` class attribute in
+`app/config.py`, and fixable `UP034` for an unnecessary generator-expression wrapper in
+`app/exercises.py`. Resolve those findings before treating lint as clean; package
+installation and the API test suite are independent of them.
+
+Run the API locally only if `OPENAI_API_KEY` is configured:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+Then send a real request:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/exercises/generated \
+  -H 'content-type: application/json' \
+  -d '{"difficulty":"medium"}'
+```
+
+Inspect the response manually:
+
+```python
+for question in payload["exercise"]["questions"]:
+    for item in question["correct_ranges"]:
+        assert 0 <= item["start"] < item["end"] <= len(payload["exercise"]["text"])
+```
+
+Do not claim the live provider path works based only on unit tests. Unit tests prove the
+contract with a fake. A real request proves configuration, authentication, LangChain model
+compatibility, structured output, and provider connectivity.
+
+## 10. Definition of done
+
+The lab is complete only when all of these are true:
+
+- `POST /api/exercises/generated` calls `QuestionGenerator`, not `EXERCISE`.
+- The request accepts only `difficulty` and supports `easy`, `medium`, and `hard`.
+- The prompt contains the exact topic, language, three-question, and offset rules above.
+- The model is called through LangChain structured output.
+- The generated result has exactly three unique questions.
+- Every question has at least one range.
+- Every range satisfies `0 <= start < end <= len(text)`.
+- Malformed provider output and provider failures both return generic `502` responses.
+- Provider exception details and secrets are not returned or logged.
+- The generated response contains a fresh API-owned ID and all three answer keys.
+- The static public exercise response still hides answer keys.
+- Tests use dependency overrides and make no network calls.
+- `uv.lock`, `.env.example`, and the direct dependency declaration are consistent.
+- `uv lock --check` passes and `uv run pytest` passes.
+- `uv run ruff check .` passes after the two noted pre-existing findings are fixed.
+
+Authentication, rate limiting, persistence, moderation, and learner-facing generated
+exercise delivery are follow-up work. Until those controls exist, keep this endpoint limited
+to author preview or another trusted internal caller.
