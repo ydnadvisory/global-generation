@@ -29,6 +29,9 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     expose:
       - "8000"
     read_only: true
