@@ -40,6 +40,17 @@ const exercise: EvidenceExercise = {
   ],
 };
 
+const generatedExerciseResponse = {
+  exercise: {
+    ...exercise,
+    id: "generated-exercise-1",
+    questions: exercise.questions.map((question) => ({
+      ...question,
+      correct_ranges: [{ start: 0, end: 10 }],
+    })),
+  },
+};
+
 const passingResult = {
   passed: true,
   score: {
@@ -84,6 +95,10 @@ describe("App", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string, init?: RequestInit) => {
+        if (input === "/api/exercises/generated") {
+          return Promise.resolve(new Response(null, { status: 502 }));
+        }
+
         if (input === "/api/exercises/rw-evidence-1" && !init) {
           return Promise.resolve(new Response(JSON.stringify(exercise)));
         }
@@ -95,6 +110,65 @@ describe("App", () => {
         return Promise.resolve(new Response(JSON.stringify(result)));
       }),
     );
+  });
+
+  it("uses a generated exercise when generation succeeds", async () => {
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      Promise.resolve(new Response(JSON.stringify(generatedExerciseResponse))),
+    );
+
+    render(<App />);
+
+    await screen.findByText(exercise.title);
+    expect(screen.getByText(exercise.questions[0].prompt)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/exercises/generated",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("grades generated answers locally", async () => {
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      Promise.resolve(new Response(JSON.stringify(generatedExerciseResponse))),
+    );
+    getSelectionRangeMock.mockReturnValue([0, 10]);
+
+    await renderApp();
+    fireEvent.mouseUp(getPassage());
+    fireEvent.click(screen.getByRole("button", { name: "Отправить ответ" }));
+
+    expect(await screen.findByText("Ответ засчитан")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the public exercise when generation fails", async () => {
+    await renderApp();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/exercises/generated",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(2, "/api/exercises/rw-evidence-1", undefined);
+  });
+
+  it("shows the exercise skeleton while fetching", async () => {
+    let resolveGenerated!: (response: Response) => void;
+    const generatedRequest = new Promise<Response>((resolve) => {
+      resolveGenerated = resolve;
+    });
+    vi.mocked(fetch).mockImplementationOnce(() => generatedRequest);
+
+    render(<App />);
+
+    expect(screen.getByRole("main", { name: "Загрузка упражнения" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(screen.getByText("Подбираем упражнение…")).toBeInTheDocument();
+
+    resolveGenerated(new Response(JSON.stringify(generatedExerciseResponse)));
+    await screen.findByText(exercise.title);
   });
 
   it("collects selections and allows clearing", async () => {

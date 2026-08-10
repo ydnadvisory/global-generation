@@ -16,22 +16,28 @@ class SelectionRange(BaseModel):
         return self
 
 
-class PublicQuestion(BaseModel):
+class QuestionBase(BaseModel):
     id: str
     prompt: str
 
 
-class PublicExercise(BaseModel):
-    id: str
-    section: str
-    difficulty: str
-    title: str
-    instruction: str
-    text: str
-    questions: list[PublicQuestion]
+class PublicQuestion(QuestionBase):
+    pass
+
+
+class ExerciseBase[QuestionT: QuestionBase](BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    section: str = Field(min_length=1)
+    difficulty: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    questions: list[QuestionT]
 
     @model_validator(mode="after")
-    def validate_questions(self) -> "PublicExercise":
+    def validate_questions(self) -> "ExerciseBase[QuestionT]":
         if not self.questions:
             raise ValueError("questions must not be empty")
         if len(self.questions) != 3:
@@ -40,6 +46,10 @@ class PublicExercise(BaseModel):
         if len(question_ids) != len(self.questions):
             raise ValueError("questions must have unique ids")
         return self
+
+
+class PublicExercise(ExerciseBase[PublicQuestion]):
+    questions: list[PublicQuestion]
 
 
 class SubmissionRequest(BaseModel):
@@ -77,27 +87,17 @@ class GenerateExerciseRequest(BaseModel):
         return self
 
 
-class GeneratedQuestion(BaseModel):
+class GeneratedQuestion(QuestionBase):
     """The model/provider output, including the answer key for trusted use."""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1)
-    prompt: str = Field(min_length=1)
     correct_ranges: list[SelectionRange] = Field(min_length=1)
 
 
-class GeneratedExercise(BaseModel):
+class GeneratedExercise(ExerciseBase[GeneratedQuestion]):
     """Strict structured output expected from the question generator."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    section: str = Field(min_length=1)
-    difficulty: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    instruction: str = Field(min_length=1)
-    text: str = Field(min_length=1)
     questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
 
 

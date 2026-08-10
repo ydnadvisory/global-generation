@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from uuid import uuid4
 
@@ -22,6 +23,8 @@ from app.models.api_models import (
     UpstreamGenerationError,
 )
 from app.question_generator import QuestionGenerator
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="global-generation-api", version="0.1.0")
 
@@ -106,6 +109,10 @@ def generate_exercise(
     try:
         generated = generator.generate(request)
     except (InvalidGeneratedExerciseError, UpstreamGenerationError) as exc:
+        logger.exception(
+            "Question generation failed for difficulty=%s",
+            request.difficulty,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Question generation failed",

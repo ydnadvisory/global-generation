@@ -1,4 +1,4 @@
-import type { TextRange } from "./api";
+import type { CoverageScore, TextRange } from "./api";
 
 export function normaliseRanges(ranges: readonly TextRange[]): TextRange[] {
   const sorted = [...ranges]
@@ -25,6 +25,57 @@ export function addRange(
   range: TextRange,
 ): TextRange[] {
   return normaliseRanges([...ranges, range]);
+}
+
+export function scoreCoverage(
+  selectedRanges: readonly TextRange[],
+  correctRanges: readonly TextRange[],
+): CoverageScore {
+  const selected = normaliseRanges(selectedRanges);
+  const correct = normaliseRanges(correctRanges);
+  const correctCharacters = correct.reduce(
+    (total, [start, end]) => total + end - start,
+    0,
+  );
+  const selectedCharacters = selected.reduce(
+    (total, [start, end]) => total + end - start,
+    0,
+  );
+  const coveredCharacters = correct.reduce(
+    (total, [correctStart, correctEnd]) =>
+      total +
+      selected.reduce(
+        (covered, [selectedStart, selectedEnd]) =>
+          covered +
+          Math.max(
+            0,
+            Math.min(correctEnd, selectedEnd) -
+              Math.max(correctStart, selectedStart),
+          ),
+        0,
+      ),
+    0,
+  );
+  const incorrectCharacters = selectedCharacters - coveredCharacters;
+  const penaltyCharacters = incorrectCharacters * 0.25;
+  const percent =
+    correctCharacters === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.round(
+            ((coveredCharacters - penaltyCharacters) / correctCharacters) * 100,
+          ),
+        );
+
+  return {
+    coveredCharacters,
+    correctCharacters,
+    incorrectCharacters,
+    penaltyCharacters,
+    selectedCharacters,
+    percent,
+  };
 }
 
 export function getSelectionRange(container: HTMLElement): TextRange | null {

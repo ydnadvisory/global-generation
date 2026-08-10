@@ -14,13 +14,15 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  getGeneratedExercise,
   getExercise,
   submitAnswer,
   type EvidenceExercise,
+  type GeneratedEvidenceExercise,
   type SubmissionResult,
   type TextRange,
 } from "./api";
-import { addRange, getSelectionRange } from "./utils";
+import { addRange, getSelectionRange, scoreCoverage } from "./utils";
 
 const navItems = [
   { label: "Главная", icon: Home },
@@ -31,9 +33,10 @@ const navItems = [
 
 type AnswersByQuestion = Record<string, TextRange[]>;
 type SubmissionsByQuestion = Record<string, SubmissionResult>;
+type LoadedExercise = EvidenceExercise | GeneratedEvidenceExercise;
 
 function App() {
-  const [exercise, setExercise] = useState<EvidenceExercise | null>(null);
+  const [exercise, setExercise] = useState<LoadedExercise | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersByQuestion>({});
@@ -47,7 +50,8 @@ function App() {
   useEffect(() => {
     let mounted = true;
 
-    getExercise()
+    getGeneratedExercise()
+      .catch(() => getExercise())
       .then((loadedExercise) => {
         if (!mounted) return;
 
@@ -68,7 +72,7 @@ function App() {
   }
 
   if (!exercise || !activeQuestionId) {
-    return <main className="app-status">Загрузка упражнения…</main>;
+    return <LoadingExercise />;
   }
 
   const loadedExercise: EvidenceExercise = exercise;
@@ -131,11 +135,27 @@ function App() {
     setSubmittingQuestionId(currentQuestion.id);
 
     try {
-      const result = await submitAnswer(
-        loadedExercise.id,
-        currentQuestion.id,
-        activeRanges,
-      );
+      const generatedRanges = "correctRangesByQuestion" in loadedExercise
+        ? (loadedExercise as GeneratedEvidenceExercise).correctRangesByQuestion
+        : undefined;
+      let result: SubmissionResult;
+      if (generatedRanges) {
+        const score = scoreCoverage(
+          activeRanges,
+          generatedRanges[currentQuestion.id] ?? [],
+        );
+        result = {
+          passed: score.percent >= 70,
+          score,
+          correctRanges: generatedRanges[currentQuestion.id] ?? [],
+        };
+      } else {
+        result = await submitAnswer(
+          loadedExercise.id,
+          currentQuestion.id,
+          activeRanges,
+        );
+      }
       setSubmissions((current) => ({
         ...current,
         [currentQuestion.id]: result,
@@ -307,6 +327,54 @@ function App() {
             </button>
           </aside>
         </div>
+      </main>
+    </PortalShell>
+  );
+}
+
+function LoadingExercise() {
+  return (
+    <PortalShell progress={0} onReset={() => undefined}>
+      <main
+        className="feature-page exercise-loading"
+        aria-busy="true"
+        aria-label="Загрузка упражнения"
+      >
+        <div className="skeleton-back skeleton-block" aria-hidden="true" />
+        <section className="feature-head" aria-hidden="true">
+          <div className="skeleton-head-copy">
+            <div className="skeleton-line skeleton-eyebrow" />
+            <div className="skeleton-line skeleton-title" />
+            <div className="skeleton-line skeleton-instruction" />
+          </div>
+          <div className="skeleton-session skeleton-block" />
+        </section>
+
+        <div className="workspace" aria-hidden="true">
+          <section className="question-card loading-card">
+            <div className="skeleton-toolbar">
+              <div className="skeleton-chip skeleton-block" />
+              <div className="skeleton-chip skeleton-block skeleton-chip-short" />
+            </div>
+            <div className="skeleton-passage">
+              <div className="skeleton-line skeleton-label" />
+              <div className="skeleton-line skeleton-text-wide" />
+              <div className="skeleton-line skeleton-text-wide" />
+              <div className="skeleton-line skeleton-text-medium" />
+              <div className="skeleton-line skeleton-text-short" />
+              <div className="skeleton-line skeleton-hint" />
+            </div>
+          </section>
+
+          <aside className="evidence-panel loading-card">
+            <div className="skeleton-line skeleton-label" />
+            <div className="skeleton-line skeleton-question" />
+            <div className="skeleton-line skeleton-question-short" />
+            <div className="skeleton-answer-box skeleton-block" />
+            <div className="skeleton-button skeleton-block" />
+          </aside>
+        </div>
+        <p className="loading-caption">Подбираем упражнение…</p>
       </main>
     </PortalShell>
   );

@@ -41,6 +41,148 @@
   font-size: 1rem;
 }
 
+.exercise-loading {
+  animation: loading-enter 220ms ease-out both;
+}
+.skeleton-block,
+.skeleton-line {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-muted);
+}
+.skeleton-block::after,
+.skeleton-line::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.72) 50%,
+    transparent 80%
+  );
+  content: "";
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+.skeleton-back {
+  width: 112px;
+  height: 18px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-sm);
+}
+.skeleton-head-copy {
+  display: grid;
+  gap: 10px;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-pill);
+}
+.skeleton-eyebrow {
+  width: 118px;
+  height: 10px;
+}
+.skeleton-title {
+  width: min(390px, 68vw);
+  height: 42px;
+  border-radius: var(--radius-base);
+}
+.skeleton-instruction {
+  width: min(540px, 76vw);
+  height: 18px;
+}
+.skeleton-session {
+  width: 144px;
+  height: 38px;
+  margin-top: 18px;
+  border-radius: var(--radius-pill);
+}
+.loading-card {
+  min-height: 430px;
+}
+.skeleton-toolbar {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.skeleton-chip {
+  width: 92px;
+  height: 25px;
+  border-radius: var(--radius-pill);
+}
+.skeleton-chip-short {
+  width: 72px;
+}
+.skeleton-passage {
+  display: grid;
+  gap: 13px;
+  padding-top: 26px;
+}
+.skeleton-label {
+  width: 92px;
+  height: 10px;
+}
+.skeleton-text-wide {
+  width: 92%;
+  height: 18px;
+}
+.skeleton-text-medium {
+  width: 78%;
+  height: 18px;
+}
+.skeleton-text-short {
+  width: 55%;
+  height: 18px;
+}
+.skeleton-hint {
+  width: 230px;
+  height: 11px;
+  margin-top: 15px;
+}
+.skeleton-question {
+  width: 88%;
+  height: 25px;
+  margin-top: 16px;
+}
+.skeleton-question-short {
+  width: 66%;
+  height: 25px;
+  margin-top: 10px;
+}
+.skeleton-answer-box {
+  height: 104px;
+  margin: 26px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.skeleton-button {
+  height: 52px;
+  border-radius: var(--radius-lg);
+}
+.loading-caption {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes loading-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .submission-error {
   margin: 0 0 0.75rem;
   color: #b42318;
