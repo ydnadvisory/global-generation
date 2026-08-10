@@ -33,6 +33,31 @@ Select the words that support an answer. Submit them. Get a transparent score.
 - Docker Compose runtime
 - Optional OpenAI exercise generation
 
+## Proposed Global Generation feature set
+
+An extension for the Global Generation SAT Portal: a focused Digital SAT
+Reading & Writing practice mode that makes students prove their answers rather
+than guess them.
+
+- **Evidence-first questions:** students highlight the exact words or sentences
+  that support an answer before submitting it.
+- **Transparent feedback:** show correctness, evidence coverage, and a concise
+  explanation so learners can identify whether the mistake was in reasoning or
+  proof selection.
+- **Adaptive daily practice:** use performance by Reading & Writing domain and
+  difficulty to recommend the next short practice set or targeted review.
+- **Progress that supports a study plan:** surface accuracy, recurring error
+  patterns, completion streaks, and a score-oriented forecast alongside the
+  portal's existing curriculum and timed practice modes.
+- **Teacher-ready content workflow:** generate draft exercises by difficulty,
+  then keep answer keys and grading on the server so published practice remains
+  reviewable and resistant to answer leakage.
+
+This repository is a technical prototype for that evidence-first practice
+experience. It currently demonstrates the exercise, selection UI, and
+server-side grading boundary; portal integration, learner profiles, analytics,
+and adaptive recommendations are proposed work.
+
 ## Docker
 
 Requirements: Docker Desktop and Docker Compose.
