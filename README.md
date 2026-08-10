@@ -21,6 +21,10 @@ Select the words that support an answer. Submit them. Get a transparent score.
 
 </div>
 
+<p align="center">
+  <img src="docs/evidence-demo.gif" alt="Short demo of selecting evidence and receiving a score" width="960" />
+</p>
+
 ## Stack
 
 - React + Vite frontend

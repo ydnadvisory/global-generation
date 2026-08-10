@@ -22,6 +22,10 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/evidence-demo.gif" alt="Короткая демонстрация выбора доказательств и получения оценки" width="960" />
+</p>
+
 ## Стек
 
 - React + Vite — интерфейс ученика
