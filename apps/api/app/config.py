@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import ClassVar
 
 from dotenv import load_dotenv
 from pydantic import SecretStr
@@ -10,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 class Settings:
     PROJECT_NAME: str = "Global Generation"
     API_V1_STR: str = "/api"
-    BACKEND_CORS_ORIGINS: list[str] = ["*"]
+    BACKEND_CORS_ORIGINS: ClassVar[list[str]] = ["*"]
 
     # OpenAI API settings
     OPENAI_API_KEY: SecretStr | None = (

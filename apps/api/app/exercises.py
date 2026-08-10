@@ -72,7 +72,7 @@ def find_question(exercise: Exercise, question_id: str) -> Question | None:
 
 
 def normalise_ranges(ranges: tuple[TextRange, ...]) -> tuple[TextRange, ...]:
-    sorted_ranges = sorted((item for item in ranges if item[1] > item[0]))
+    sorted_ranges = sorted(item for item in ranges if item[1] > item[0])
     merged: list[TextRange] = []
 
     for start, end in sorted_ranges:

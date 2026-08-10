@@ -11,6 +11,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import type { EvidenceExercise } from "./api";
 
 vi.mock("./utils", async () => {
@@ -48,6 +49,14 @@ const generatedExerciseResponse = {
       ...question,
       correct_ranges: [{ start: 0, end: 10 }],
     })),
+  },
+};
+
+const regeneratedExerciseResponse = {
+  exercise: {
+    ...generatedExerciseResponse.exercise,
+    id: "generated-exercise-2",
+    title: "A fresh evidence exercise",
   },
 };
 
@@ -128,6 +137,21 @@ describe("App", () => {
     );
   });
 
+  it("does not duplicate the initial API call in Strict Mode", async () => {
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      Promise.resolve(new Response(JSON.stringify(generatedExerciseResponse))),
+    );
+
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+
+    await screen.findByText(exercise.title);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("grades generated answers locally", async () => {
     vi.mocked(fetch).mockImplementationOnce(() =>
       Promise.resolve(new Response(JSON.stringify(generatedExerciseResponse))),
@@ -150,6 +174,45 @@ describe("App", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(fetch).toHaveBeenNthCalledWith(2, "/api/exercises/rw-evidence-1", undefined);
+  });
+
+  it("regenerates the exercise and resets the session", async () => {
+    let generatedCalls = 0;
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (path === "/api/exercises/generated") {
+        generatedCalls += 1;
+        return Promise.resolve(new Response(
+          JSON.stringify(
+            generatedCalls === 1
+              ? generatedExerciseResponse
+              : regeneratedExerciseResponse,
+          ),
+        ));
+      }
+
+      if (path === "/api/exercises/rw-evidence-1" && !init) {
+        return Promise.resolve(new Response(JSON.stringify(exercise)));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify(reviewResult)));
+    });
+
+    await renderApp();
+    fireEvent.click(screen.getByRole("button", { name: "Новое упражнение" }));
+
+    expect(await screen.findByText("A fresh evidence exercise")).toBeInTheDocument();
+    expect(screen.getByText("0 из 3 вопросов")).toBeInTheDocument();
+    expect(generatedCalls).toBe(2);
+  });
+
+  it("hides regeneration for the static fallback exercise", async () => {
+    await renderApp();
+
+    expect(
+      screen.queryByRole("button", { name: "Новое упражнение" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the exercise skeleton while fetching", async () => {

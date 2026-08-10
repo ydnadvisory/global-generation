@@ -62,14 +62,34 @@ type ApiSubmissionResult = {
   correct_ranges: ApiRange[];
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+const inFlightRequests = new Map<string, Promise<unknown>>();
 
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = init?.method ?? "GET";
+  const body = typeof init?.body === "string" ? init.body : "";
+  const requestKey = `${method} ${path} ${body}`;
+  const existingRequest = inFlightRequests.get(requestKey);
+
+  if (existingRequest) {
+    return existingRequest as Promise<T>;
   }
 
-  return response.json() as Promise<T>;
+  const requestPromise = fetch(path, init)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      return response.json() as Promise<T>;
+    })
+    .finally(() => {
+      if (inFlightRequests.get(requestKey) === requestPromise) {
+        inFlightRequests.delete(requestKey);
+      }
+    });
+
+  inFlightRequests.set(requestKey, requestPromise);
+  return requestPromise;
 }
 
 export function getExercise(): Promise<EvidenceExercise> {

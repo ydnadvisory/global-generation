@@ -88,7 +88,7 @@ class GenerateExerciseRequest(BaseModel):
 
 
 class GeneratedQuestion(QuestionBase):
-    """The model/provider output, including the answer key for trusted use."""
+    """The trusted generated response, including the resolved answer key."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -96,9 +96,32 @@ class GeneratedQuestion(QuestionBase):
 
 
 class GeneratedExercise(ExerciseBase[GeneratedQuestion]):
-    """Strict structured output expected from the question generator."""
+    """The trusted generated response returned by the API."""
 
     questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
+
+
+class GeneratedQuestionDraft(QuestionBase):
+    """Provider output before evidence snippets are resolved to character ranges."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence: list[str] = Field(min_length=1)
+
+
+class GeneratedExerciseDraft(ExerciseBase[GeneratedQuestionDraft]):
+    """Strict structured output expected from the generation model."""
+
+    questions: list[GeneratedQuestionDraft] = Field(min_length=3, max_length=3)
+
+
+class EvidenceValidationResult(BaseModel):
+    """Structured semantic review returned by the validation model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    valid: bool
+    issues: list[str] = Field(default_factory=list)
 
 
 class GenerateExerciseResponse(BaseModel):

@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Home,
   Lightbulb,
+  RefreshCw,
   RotateCcw,
   Settings,
   Target,
@@ -42,6 +43,8 @@ function App() {
   const [answers, setAnswers] = useState<AnswersByQuestion>({});
   const [submissions, setSubmissions] = useState<SubmissionsByQuestion>({});
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [submittingQuestionId, setSubmittingQuestionId] = useState<string | null>(
     null,
   );
@@ -76,6 +79,7 @@ function App() {
   }
 
   const loadedExercise: EvidenceExercise = exercise;
+  const canRegenerate = "correctRangesByQuestion" in exercise;
 
   const selectedQuestion = loadedExercise.questions.find(
     ({ id }) => id === activeQuestionId,
@@ -126,6 +130,24 @@ function App() {
     setAnswers({});
     setSubmissions({});
     setSubmissionError(null);
+  }
+
+  async function regenerateExercise() {
+    setIsRegenerating(true);
+    setRegenerateError(null);
+
+    try {
+      const freshExercise = await getGeneratedExercise("medium");
+      setExercise(freshExercise);
+      setActiveQuestionId(freshExercise.questions[0]?.id ?? null);
+      setAnswers({});
+      setSubmissions({});
+      setSubmissionError(null);
+    } catch {
+      setRegenerateError("Не удалось создать новое упражнение. Попробуйте ещё раз.");
+    } finally {
+      setIsRegenerating(false);
+    }
   }
 
   async function submitActiveAnswer() {
@@ -184,11 +206,29 @@ function App() {
             <h1>{loadedExercise.title}</h1>
             <p>{loadedExercise.instruction}</p>
           </div>
-          <div className="session-meta">
-            <Clock3 size={17} /> {completedCount} из {loadedExercise.questions.length}{" "}
-            вопросов
+          <div className="head-actions">
+            {canRegenerate && (
+              <button
+                className="secondary-button"
+                onClick={regenerateExercise}
+                disabled={isRegenerating}
+              >
+                <RefreshCw size={16} className={isRegenerating ? "spin" : undefined} />
+                {isRegenerating ? "Генерируем…" : "Новое упражнение"}
+              </button>
+            )}
+            <div className="session-meta">
+              <Clock3 size={17} /> {completedCount} из {loadedExercise.questions.length}{" "}
+              вопросов
+            </div>
           </div>
         </section>
+
+        {canRegenerate && regenerateError && (
+          <p className="regenerate-error" role="alert">
+            {regenerateError}
+          </p>
+        )}
 
         <div className="workspace">
           <section className="question-card">

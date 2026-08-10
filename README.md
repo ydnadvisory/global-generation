@@ -36,7 +36,8 @@ flowchart LR
     Browser -->|POST selected ranges| Proxy
     Proxy -->|/api| API[FastAPI grading service]
     API --> Fixture[(Deterministic exercise fixture)]
-    API -. optional generation .-> OpenAI[OpenAI structured output]
+    API -. generate draft .-> OpenAI[OpenAI structured output]
+    API -. semantic review .-> Reviewer[OpenAI validation call]
     API -->|score + feedback| Proxy
     Proxy --> Browser
 ```
@@ -45,7 +46,7 @@ flowchart LR
 | --- | --- | --- |
 | Web | Selection capture, highlighting, question flow, feedback UI | `apps/web` |
 | API | Public exercise payload, validation, server-side grading | `apps/api` |
-| Generation | Strict three-question exercise generation; optional provider seam | `apps/api/app/question_generator.py` |
+| Generation | Two-stage generation and semantic validation; optional provider seam | `apps/api/app/question_generator.py` |
 | Edge | SPA fallback, `/api` proxy, health endpoint | `infra/nginx/nginx.conf` |
 | Runtime | Two services with health checks and locked-down containers | `compose.yaml` |
 
@@ -97,6 +98,16 @@ OPENAI_MODEL=gpt-4o-mini
 
 Do not commit that file. The request contract intentionally accepts only `difficulty`: `easy`, `medium`, or `hard`.
 
+When generation succeeds, the learner UI shows **Новое упражнение**. It requests another generated exercise at the same difficulty and resets the current selections, submissions, and progress. The button is hidden when the deterministic fallback fixture is being used.
+
+Generation uses two structured model calls:
+
+1. The first call creates the passage, questions, and evidence snippets copied verbatim from the passage.
+2. The API resolves those snippets to exact character ranges and performs deterministic boundary and uniqueness checks.
+3. The second call validates that each question is directly and completely answered by its evidence.
+
+The API retries invalid generated content at most once. Raw model offsets are not trusted; the server calculates `correct_ranges` from the validated snippets.
+
 ## API surface
 
 | Method | Endpoint | Purpose |
@@ -129,11 +140,11 @@ npm run api:test
 cd apps/api && uv run ruff check .
 ```
 
-The frontend tests cover generated-exercise fallback, multi-range selection, removal, submission, and review feedback. The API tests cover answer-key redaction, server-side grading, range validation, strict generation input, and provider failure handling.
+The frontend tests cover generated-exercise fallback, generated-only regeneration, multi-range selection, removal, submission, and review feedback. The API tests cover answer-key redaction, server-side grading, range validation, strict generation input, semantic generation validation, bounded retry behavior, and provider failure handling.
 
 ## Security boundary
 
-The deterministic exercise is served as a public payload without its answer key. The API owns the fixture key and performs the authoritative grading. The generated route is a trusted internal/provider path and returns structured answer ranges so the generated exercise can be used by the client.
+The deterministic exercise is served as a public payload without its answer key. The API owns the fixture key and performs the authoritative grading. For generated exercises, provider evidence snippets are independently resolved and reviewed by the API before trusted `correct_ranges` are returned to the client.
 
 Containers are configured with read-only filesystems, dropped Linux capabilities, `no-new-privileges`, non-root users where supported, health checks, and an internal-only API service.
 
