@@ -45,10 +45,7 @@ const generatedExerciseResponse = {
   exercise: {
     ...exercise,
     id: "generated-exercise-1",
-    questions: exercise.questions.map((question) => ({
-      ...question,
-      correct_ranges: [{ start: 0, end: 10 }],
-    })),
+    questions: exercise.questions,
   },
 };
 
@@ -152,18 +149,24 @@ describe("App", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("grades generated answers locally", async () => {
+  it("submits generated answers to the API", async () => {
     vi.mocked(fetch).mockImplementationOnce(() =>
       Promise.resolve(new Response(JSON.stringify(generatedExerciseResponse))),
     );
-    getSelectionRangeMock.mockReturnValue([0, 10]);
+    getSelectionRangeMock
+      .mockReturnValueOnce([0, 10])
+      .mockReturnValueOnce([15, 20]);
 
     await renderApp();
+    fireEvent.mouseUp(getPassage());
     fireEvent.mouseUp(getPassage());
     fireEvent.click(screen.getByRole("button", { name: "Отправить ответ" }));
 
     expect(await screen.findByText("Ответ засчитан")).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/exercises/generated-exercise-1/submissions",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("falls back to the public exercise when generation fails", async () => {
