@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -77,11 +77,18 @@ MAX_GENERATION_ATTEMPTS = 2
 
 
 class StructuredRunnable(Protocol):
-    def invoke(self, prompt: str) -> object: ...
+    def invoke(self, prompt: str) -> Any: ...
 
 
 class StructuredOutputModel(Protocol):
-    def with_structured_output(self, schema: type[BaseModel]) -> StructuredRunnable: ...
+    """Minimum model boundary used by the generator.
+
+    LangChain's generic Runnable return type is broader than this module's provider-neutral
+    protocol, so the SDK boundary intentionally exposes it as Any. The provider output is
+    validated immediately after invocation with the requested Pydantic schema.
+    """
+
+    def with_structured_output(self, schema: type[BaseModel]) -> Any: ...
 
 
 def build_prompt(request: GenerateExerciseRequest) -> str:
