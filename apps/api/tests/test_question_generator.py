@@ -125,6 +125,16 @@ def test_question_generator_resolves_snippets_and_calls_validator() -> None:
     assert result.questions[0].correct_ranges[0].model_dump() == {"start": 12, "end": 25}
 
 
+def test_question_generator_normalizes_provider_difficulty() -> None:
+    draft = generated_draft()
+    draft["difficulty"] = "Medium"
+    generator = QuestionGenerator(FakeModel([draft], [{"valid": True, "issues": []}]))
+
+    result = generator.generate(GenerateExerciseRequest(difficulty="medium"))
+
+    assert result.difficulty == "medium"
+
+
 def test_question_generator_retries_once_after_semantic_rejection() -> None:
     generator = QuestionGenerator(
         FakeModel(

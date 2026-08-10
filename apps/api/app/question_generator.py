@@ -67,6 +67,11 @@ def build_prompt(request: GenerateExerciseRequest) -> str:
     return PROMPT_TEMPLATE.format(difficulty=request.difficulty)
 
 
+def normalize_generated_difficulty(difficulty: str) -> str:
+    """Canonicalize harmless provider formatting before request validation."""
+    return difficulty.strip().lower()
+
+
 def resolve_evidence_ranges(text: str, evidence: list[str]) -> list[SelectionRange]:
     ranges: list[SelectionRange] = []
     for snippet in evidence:
@@ -149,7 +154,7 @@ class QuestionGenerator:
         exercise = GeneratedExercise(
             id=draft.id,
             section=draft.section,
-            difficulty=draft.difficulty,
+            difficulty=normalize_generated_difficulty(draft.difficulty),
             title=draft.title,
             instruction=draft.instruction,
             text=draft.text,

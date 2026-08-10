@@ -33,6 +33,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
+> [!IMPORTANT]
+> **Set `OPENAI_API_KEY` in `.env` before starting Docker.** It is required for
+> generated exercises. Without it, the app uses the deterministic fallback.
+
 Open <http://localhost:8080>.
 
 The web container publishes the host port. The API is internal and is exposed
