@@ -52,6 +52,27 @@ Exercise:
 {exercise}
 """
 
+REPAIR_PROMPT_TEMPLATE = """Repair this Reading & Writing evidence-selection exercise.
+
+Difficulty must be: {difficulty}.
+The previous draft failed independent server validation with this error:
+{failure}
+
+Previous draft:
+{draft}
+
+Return a complete corrected exercise matching the supplied structured-output schema.
+Rules:
+- You may rewrite the text, questions, and evidence as needed.
+- Write the complete final text before choosing evidence.
+- Copy every evidence string character-for-character from that final text.
+- Every evidence string must occur exactly once in the final text, with no leading or trailing
+  whitespace.
+- Each evidence string must directly and completely answer its question.
+- Return exactly three questions with distinct IDs.
+- Return no explanations, Markdown, or extra fields.
+"""
+
 MAX_GENERATION_ATTEMPTS = 2
 
 
@@ -92,6 +113,18 @@ def resolve_evidence_ranges(text: str, evidence: list[str]) -> list[SelectionRan
 
 def build_validation_prompt(exercise: GeneratedExerciseDraft) -> str:
     return VALIDATION_PROMPT_TEMPLATE.format(exercise=exercise.model_dump_json(indent=2))
+
+
+def build_repair_prompt(
+    request: GenerateExerciseRequest,
+    draft: GeneratedExerciseDraft,
+    failure: str,
+) -> str:
+    return REPAIR_PROMPT_TEMPLATE.format(
+        difficulty=request.difficulty,
+        failure=failure,
+        draft=draft.model_dump_json(indent=2),
+    )
 
 
 def validate_generated_exercise(
@@ -147,10 +180,9 @@ class QuestionGenerator:
         self.generation_model = model.with_structured_output(GeneratedExerciseDraft)
         self.validation_model = model.with_structured_output(EvidenceValidationResult)
 
-    def _generate_once(self, request: GenerateExerciseRequest) -> GeneratedExercise:
-        draft = GeneratedExerciseDraft.model_validate(
-            self.generation_model.invoke(build_prompt(request))
-        )
+    def _build_exercise(
+        self, request: GenerateExerciseRequest, draft: GeneratedExerciseDraft
+    ) -> GeneratedExercise:
         exercise = GeneratedExercise(
             id=draft.id,
             section=draft.section,
@@ -171,9 +203,12 @@ class QuestionGenerator:
 
     def generate(self, request: GenerateExerciseRequest) -> GeneratedExercise:
         last_invalid: InvalidGeneratedExerciseError | None = None
-        for _ in range(MAX_GENERATION_ATTEMPTS):
+        prompt = build_prompt(request)
+        for attempt in range(MAX_GENERATION_ATTEMPTS):
+            draft: GeneratedExerciseDraft | None = None
             try:
-                exercise = self._generate_once(request)
+                draft = GeneratedExerciseDraft.model_validate(self.generation_model.invoke(prompt))
+                exercise = self._build_exercise(request, draft)
                 validation = EvidenceValidationResult.model_validate(
                     self.validation_model.invoke(
                         build_validation_prompt(
@@ -205,6 +240,8 @@ class QuestionGenerator:
                 return exercise
             except InvalidGeneratedExerciseError as exc:
                 last_invalid = exc
+                if attempt + 1 < MAX_GENERATION_ATTEMPTS and draft is not None:
+                    prompt = build_repair_prompt(request, draft, str(exc))
             except Exception as exc:
                 raise UpstreamGenerationError("question provider failed") from exc
 

@@ -71,8 +71,10 @@ def test_resolve_evidence_ranges_rejects_ambiguous_snippets() -> None:
 class FakeStructuredModel:
     def __init__(self, responses: list[object]) -> None:
         self.responses = iter(responses)
+        self.prompts: list[str] = []
 
     def invoke(self, prompt: str) -> object:
+        self.prompts.append(prompt)
         return next(self.responses)
 
 
@@ -149,6 +151,32 @@ def test_question_generator_retries_once_after_semantic_rejection() -> None:
     result = generator.generate(GenerateExerciseRequest(difficulty="medium"))
 
     assert result.id == "draft-1"
+
+
+def test_question_generator_repairs_missing_evidence_with_targeted_prompt() -> None:
+    invalid_draft = generated_draft()
+    invalid_draft["questions"] = [
+        {
+            **question,
+            "evidence": ["does not occur"],
+        }
+        if question["id"] == "question-1"
+        else question
+        for question in invalid_draft["questions"]  # type: ignore[index]
+    ]
+    model = FakeModel(
+        [invalid_draft, generated_draft()],
+        [{"valid": True}],
+    )
+
+    result = QuestionGenerator(model).generate(GenerateExerciseRequest(difficulty="medium"))
+
+    assert result.id == "draft-1"
+    repair_prompt = model.generation_model.prompts[1]
+    assert "Repair this Reading & Writing evidence-selection exercise" in repair_prompt
+    assert "Evidence does not occur in the generated text." in repair_prompt
+    assert '"evidence"' in repair_prompt
+    assert '"does not occur"' in repair_prompt
 
 
 @pytest.mark.parametrize(
