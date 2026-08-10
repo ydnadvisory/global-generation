@@ -27,6 +27,7 @@ Rules:
 - Write the complete final text before choosing evidence.
 - Do not change the text after choosing evidence.
 - Each question must ask about one specific claim that is explicitly stated in the text.
+- Each question must use alternative wording, not repeating the text verbatim.
 - Each evidence string must directly and completely answer its question.
 - Do not use vague prompts such as "What is one benefit?" when several answers are possible;
   name the specific benefit or claim the learner must find.
