@@ -9,8 +9,8 @@ from app.models.api_models import (
 
 PROMPT_TEMPLATE = """You create Reading & Writing evidence-selection exercises.
 
-Choose one suitable, age-appropriate academic topic at random. Create one original English
-text about that topic. Difficulty: {difficulty}.
+Choose one suitable, age-appropriate academic topic at random. Create one original English text
+about that topic. Difficulty: {difficulty}.
 
 Return exactly three questions. Each question must ask the learner to select evidence from
 the text. For every question, provide one or more correct_ranges using character offsets in

@@ -1,20 +1,25 @@
 from functools import lru_cache
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
 from app.exercises import EXERCISE, PASSING_PERCENT, TextRange, find_question, score_coverage
 from app.models.api_models import (
     CoverageScore,
+    GeneratedExercise,
+    GeneratedQuestion,
     GenerateExerciseRequest,
     GenerateExerciseResponse,
     HealthResponse,
+    InvalidGeneratedExerciseError,
     PublicExercise,
     PublicQuestion,
     SelectionRange,
     SubmissionRequest,
     SubmissionResponse,
+    UpstreamGenerationError,
 )
 from app.question_generator import QuestionGenerator
 
@@ -33,12 +38,35 @@ def get_question_generator() -> "QuestionGenerator":
         raise RuntimeError("OPENAI_API_KEY is not set in the environment")
 
     model = ChatOpenAI(
-        model_name=config.OPENAI_MODEL,
-        openai_api_key=config.OPENAI_API_KEY,
+        api_key=config.OPENAI_API_KEY,
+        model=config.OPENAI_MODEL,
         temperature=0.7,
-        max_tokens=1500,
     )
     return QuestionGenerator(model)
+
+
+question_generator_dependency = Depends(get_question_generator)
+
+
+def generated_to_response(exercise: GeneratedExercise) -> GenerateExerciseResponse:
+    return GenerateExerciseResponse(
+        exercise=GeneratedExercise(
+            id=f"generated-{uuid4()}",
+            section=exercise.section,
+            difficulty=exercise.difficulty,
+            title=exercise.title,
+            instruction=exercise.instruction,
+            text=exercise.text,
+            questions=[
+                GeneratedQuestion(
+                    id=question.id,
+                    prompt=question.prompt,
+                    correct_ranges=question.correct_ranges,
+                )
+                for question in exercise.questions
+            ],
+        )
+    )
 
 
 @app.get("/", response_model=HealthResponse)
@@ -71,21 +99,19 @@ def get_exercise(exercise_id: str) -> PublicExercise:
 
 
 @app.post(f"{api_version}/exercises/generated", response_model=GenerateExerciseResponse)
-def generate_exercise(request: GenerateExerciseRequest) -> GenerateExerciseResponse:
-    return GenerateExerciseResponse(
-        exercise=PublicExercise(
-            id=EXERCISE.id,
-            section=EXERCISE.section,
-            difficulty=EXERCISE.difficulty,
-            title=EXERCISE.title,
-            instruction=EXERCISE.instruction,
-            text=EXERCISE.text,
-            questions=[
-                PublicQuestion(id=question.id, prompt=question.prompt)
-                for question in EXERCISE.questions
-            ],
-        )
-    )
+def generate_exercise(
+    request: GenerateExerciseRequest,
+    generator: QuestionGenerator = question_generator_dependency,
+) -> GenerateExerciseResponse:
+    try:
+        generated = generator.generate(request)
+    except (InvalidGeneratedExerciseError, UpstreamGenerationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Question generation failed",
+        ) from exc
+
+    return generated_to_response(generated)
 
 
 @app.post(

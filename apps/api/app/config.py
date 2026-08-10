@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import SecretStr
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -12,5 +13,7 @@ class Settings:
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
     # OpenAI API settings
-    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY", None)
+    OPENAI_API_KEY: SecretStr | None = (
+        SecretStr(os.getenv("OPENAI_API_KEY", "")) if os.getenv("OPENAI_API_KEY", None) else None
+    )
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

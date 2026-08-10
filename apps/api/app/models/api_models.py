@@ -77,10 +77,6 @@ class GenerateExerciseRequest(BaseModel):
         return self
 
 
-class GenerateExerciseResponse(BaseModel):
-    exercise: PublicExercise
-
-
 class GeneratedQuestion(BaseModel):
     """The model/provider output, including the answer key for trusted use."""
 
@@ -96,12 +92,17 @@ class GeneratedExercise(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    id: str = Field(min_length=1)
     section: str = Field(min_length=1)
     difficulty: str = Field(min_length=1)
     title: str = Field(min_length=1)
     instruction: str = Field(min_length=1)
     text: str = Field(min_length=1)
     questions: list[GeneratedQuestion] = Field(min_length=3, max_length=3)
+
+
+class GenerateExerciseResponse(BaseModel):
+    exercise: GeneratedExercise
 
 
 class GenerationError(Exception):
